@@ -62,7 +62,7 @@
           <div style="position:relative;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap">
             <div>
               <div style="font-family:Sora,sans-serif;font-weight:800;font-size:30px;letter-spacing:-0.01em;color:white">Resumen del equipo</div>
-              <div style="font-size:14.5px;color:oklch(0.94 0.02 254);margin-top:6px;font-weight:500">Desempeño de tus ejecutivos de cuenta · {{ selectedMonthLabel }}</div>
+              <div style="font-size:14.5px;color:oklch(0.94 0.02 254);margin-top:6px;font-weight:500">Desempeño de Ejecutivos de cuenta · {{ selectedMonthLabel }}</div>
             </div>
             <div style="display:flex;gap:14px;flex-wrap:wrap">
               <sc-for list="{{heroStats}}" as="stat" hint-placeholder-count="2">
@@ -401,7 +401,7 @@ class Component extends DCLogic {
 
   buildDefaultData(){
     const daniela = {
-      id:'daniela', name:'Daniela Mena Rosales', roleLabel:'Promotoría Fija · Bepensa', client:'BEPENSA',
+      id:'daniela', name:'Daniele Mena Rosales', roleLabel:'Promotoría Fija · Bepensa', client:'BEPENSA',
       categories: [
         { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
           {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 90% de días efectivos al mes.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
