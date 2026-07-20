@@ -377,6 +377,28 @@ class Component extends DCLogic {
     this.state.data = this.loadData();
   }
 
+  componentDidMount(){
+    fetch('/api/state')
+      .then(r => r.ok ? r.json() : null)
+      .then(payload => {
+        if (payload && payload.data) {
+          this.setState({ data: payload.data });
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload.data)); } catch(e) {}
+        } else {
+          this.syncRemote(this.state.data);
+        }
+      })
+      .catch(() => {});
+  }
+
+  syncRemote(data){
+    fetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data })
+    }).catch(() => {});
+  }
+
   buildDefaultData(){
     const daniela = {
       id:'daniela', name:'Daniela Mena Rosales', roleLabel:'Promotoría Fija · Bepensa', client:'BEPENSA',
@@ -493,6 +515,7 @@ class Component extends DCLogic {
   saveData(data){
     this.setState({ data });
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+    this.syncRemote(data);
   }
 
   statusFor(score){
