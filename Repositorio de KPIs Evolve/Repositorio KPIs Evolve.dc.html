@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;background:oklch(0.975 0.006 255) radial-gradient(circle at 15% 0%, oklch(0.94 0.03 254 / 0.5), transparent 45%), radial-gradient(circle at 100% 10%, oklch(0.94 0.03 254 / 0.4), transparent 40%);background-attachment:fixed;font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+    * { box-sizing: border-box; }
+    input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:99px;background:oklch(0.9 0.01 255);outline:none;}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent, oklch(0.55 0.19 254));border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25);cursor:pointer;}
+    ::selection{background:oklch(0.85 0.06 254);}
+    @media print{ [data-no-print]{display:none !important;} body{background:white;} }
+  </style>
+</helmet>
+<div style="min-height:100vh;color:oklch(0.24 0.03 255)">
+  <div style="position:sticky;top:0;z-index:10;background:oklch(0.99 0.003 255 / 0.9);backdrop-filter:blur(10px);border-bottom:1px solid oklch(0.9 0.01 255)">
+    <div style="max-width:1180px;margin:0 auto;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img src="assets/evolve-logo.png" alt="Evolve" style="height:34px;width:auto;flex:none"/>
+        <div style="width:1px;height:28px;background:oklch(0.88 0.01 255)"></div>
+        <div>
+          <div style="font-family:Sora,sans-serif;font-weight:800;font-size:19px;letter-spacing:-0.01em;line-height:1.1">Repositorio de KPIs</div>
+          <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:500">Evolve · Cuentas Bepensa &amp; Gifan</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;background:oklch(0.94 0.01 255);border-radius:11px;padding:3px;gap:2px">
+          <sc-for list="{{roleTabs}}" as="tab" hint-placeholder-count="3">
+            <button onClick="{{tab.onClick}}" style="border:none;padding:8px 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;background:{{tab.bg}};color:{{tab.color}};font-family:Inter,sans-serif">{{ tab.label }}</button>
+          </sc-for>
+        </div>
+        <sc-if value="{{isEjecutivoRole}}" hint-placeholder-val="{{false}}">
+          <select value="{{ejecutivoViewId}}" onChange="{{onEjecutivoSelect}}" style="border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-size:13px;font-weight:600;font-family:Inter,sans-serif;background:white;color:oklch(0.3 0.02 255)">
+            <sc-for list="{{ejecutivoOptions}}" as="opt" hint-placeholder-count="3">
+              <option value="{{opt.id}}">{{ opt.name }}</option>
+            </sc-for>
+          </select>
+        </sc-if>
+        <select value="{{selectedMonth}}" onChange="{{onMonthSelect}}" style="border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-size:13px;font-weight:600;font-family:Inter,sans-serif;background:white;color:oklch(0.3 0.02 255)">
+          <sc-for list="{{months}}" as="m" hint-placeholder-count="6">
+            <option value="{{m.value}}">{{ m.label }}</option>
+          </sc-for>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1180px;margin:0 auto;padding:32px 28px 80px">
+    <sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+      <div data-screen-label="Resumen equipo">
+        <div style="position:relative;overflow:hidden;border-radius:24px;background:linear-gradient(135deg, {{brand.accent}}, oklch(0.4 0.16 258));padding:36px 34px;margin-bottom:28px">
+          <div style="position:absolute;width:220px;height:90px;background:oklch(1 0 0 / 0.10);top:-30px;right:60px;transform:skew(-24deg)"></div>
+          <div style="position:absolute;width:160px;height:60px;background:oklch(1 0 0 / 0.10);bottom:-10px;right:220px;transform:skew(-24deg)"></div>
+          <div style="position:absolute;width:300px;height:110px;background:oklch(1 0 0 / 0.06);bottom:-50px;right:-40px;transform:skew(-24deg)"></div>
+          <div style="position:relative;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap">
+            <div>
+              <div style="font-family:Sora,sans-serif;font-weight:800;font-size:30px;letter-spacing:-0.01em;color:white">Resumen del equipo</div>
+              <div style="font-size:14.5px;color:oklch(0.94 0.02 254);margin-top:6px;font-weight:500">Desempeño de tus ejecutivos de cuenta · {{ selectedMonthLabel }}</div>
+            </div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap">
+              <sc-for list="{{heroStats}}" as="stat" hint-placeholder-count="2">
+                <div style="background:oklch(1 0 0 / 0.12);border-radius:14px;padding:12px 20px;text-align:center;backdrop-filter:blur(6px)">
+                  <div style="font-family:Sora,sans-serif;font-weight:800;font-size:22px;color:white">{{ stat.value }}</div>
+                  <div style="font-size:11.5px;color:oklch(0.92 0.02 254);font-weight:600">{{ stat.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <sc-for list="{{execCards}}" as="card" hint-placeholder-count="3">
+            <div onClick="{{card.openHandler}}" style="flex:1;min-width:300px;background:white;border-radius:20px;padding:26px;border:1px solid oklch(0.91 0.01 255);box-shadow:0 1px 3px rgba(20,30,50,0.05);cursor:pointer;display:flex;flex-direction:column;gap:16px" style-hover="box-shadow:0 8px 22px rgba(20,30,50,0.1);transform:translateY(-2px)">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:72px;height:72px;border-radius:50%;flex:none;overflow:hidden">
+                    <x-import component-from-global-scope="image-slot" from="./image-slot.js" id="avatar-{{card.id}}" shape="circle" placeholder="foto" hint-size="72px,72px" style="width:72px;height:72px"></x-import>
+                  </div>
+                  <div>
+                    <div style="font-family:Sora,sans-serif;font-weight:700;font-size:17px">{{ card.name }}</div>
+                    <div style="font-size:12.5px;color:oklch(0.5 0.02 255);margin-top:2px">{{ card.roleLabel }}</div>
+                  </div>
+                </div>
+                <div style="font-size:11px;font-weight:700;padding:4px 9px;border-radius:99px;background:oklch(0.94 0.02 255);color:oklch(0.4 0.03 255);letter-spacing:0.02em">{{ card.client }}</div>
+              </div>
+              <div style="display:flex;align-items:flex-end;gap:12px">
+                <div style="font-family:Sora,sans-serif;font-weight:800;font-size:38px;line-height:1;color:{{card.totalColor}}">{{ card.totalDisplay }}</div>
+                <div style="font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:99px;background:{{card.statusBg}};color:{{card.statusColor}};margin-bottom:5px">{{ card.statusLabel }}</div>
+              </div>
+              <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:600">Variable: <span style="color:oklch(0.3 0.02 255)">{{ card.variableDisplay }}</span></div>
+              <svg viewBox="0 0 300 70" style="width:100%;height:56px;display:block">
+                <polyline points="{{card.sparkPoints}}" fill="none" stroke="{{brand.accent}}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                <sc-for list="{{card.sparkDots}}" as="d" hint-placeholder-count="5">
+                  <circle cx="{{d.cx}}" cy="{{d.cy}}" r="3.5" fill="{{brand.accent}}"></circle>
+                </sc-for>
+              </svg>
+              <sc-if value="{{card.pendingNote}}" hint-placeholder-val="{{false}}">
+                <div style="font-size:12px;color:oklch(0.5 0.13 80);font-weight:600;background:oklch(0.96 0.05 85);padding:8px 10px;border-radius:9px">{{ card.pendingNote }}</div>
+              </sc-if>
+              <sc-if value="{{card.alertNote}}" hint-placeholder-val="{{false}}">
+                <div style="font-size:12px;color:oklch(0.5 0.16 25);font-weight:600;background:oklch(0.95 0.06 25);padding:8px 10px;border-radius:9px">⚠ {{ card.alertNote }}</div>
+              </sc-if>
+              <div style="font-size:13px;font-weight:700;color:{{brand.accent}};margin-top:auto">Ver detalle y calificar →</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{isJefeRole}}" hint-placeholder-val="{{false}}">
+          <div style="margin-top:32px;background:white;border-radius:20px;padding:26px;border:1px solid oklch(0.91 0.01 255)">
+            <div style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;margin-bottom:18px">Comparativo del mes</div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{execCards}}" as="row" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:14px">
+                  <div style="width:150px;font-size:13px;font-weight:600;flex:none">{{ row.name }}</div>
+                  <div style="flex:1;height:12px;background:oklch(0.93 0.01 255);border-radius:99px;overflow:hidden">
+                    <div style="height:100%;border-radius:99px;background:{{row.totalColor}};width:{{row.barPct}}"></div>
+                  </div>
+                  <div style="width:44px;text-align:right;font-size:13px;font-weight:700;flex:none">{{ row.totalDisplay }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
+      <div data-screen-label="Detalle ejecutivo">
+        <sc-if value="{{showBack}}" hint-placeholder-val="{{false}}">
+          <button onClick="{{goHome}}" style="border:none;background:none;color:oklch(0.5 0.02 255);font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:16px;display:flex;align-items:center;gap:6px">← Volver al resumen</button>
+        </sc-if>
+
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-bottom:24px">
+          <div>
+            <div style="font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:99px;background:oklch(0.94 0.02 255);color:oklch(0.4 0.03 255);display:inline-block;margin-bottom:10px">{{ detail.client }}</div>
+            <div style="display:flex;align-items:center;gap:14px">
+              <div style="width:84px;height:84px;border-radius:50%;flex:none;overflow:hidden">
+                <image-slot id="avatar-detail-{{detail.execId}}" shape="circle" placeholder="foto" style="width:84px;height:84px"></image-slot>
+              </div>
+              <div>
+                <div style="font-family:Sora,sans-serif;font-weight:800;font-size:26px;letter-spacing:-0.01em">{{ detail.name }}</div>
+                <div style="font-size:14px;color:oklch(0.5 0.02 255);margin-top:4px">{{ detail.roleLabel }} · {{ selectedMonthLabel }}</div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+            <div style="display:flex;align-items:center;gap:14px;background:white;border:1px solid oklch(0.91 0.01 255);border-radius:16px;padding:16px 22px">
+              <div style="font-family:Sora,sans-serif;font-weight:800;font-size:34px;color:{{detail.totalColor}}">{{ detail.totalDisplay }}</div>
+              <div style="font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:99px;background:{{detail.statusBg}};color:{{detail.statusColor}}">{{ detail.statusLabel }}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
+              <div style="font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:99px;background:{{detail.ack.bg}};color:{{detail.ack.color}}">{{ detail.ack.label }}</div>
+              <sc-if value="{{detail.ack.canSign}}" hint-placeholder-val="{{false}}">
+                <button onClick="{{detail.ack.onSign}}" style="border:none;background:{{brand.accent}};color:white;font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Confirmar retroalimentación</button>
+              </sc-if>
+            </div>
+            <div data-no-print style="display:flex;gap:8px">
+              <button onClick="{{detail.onExportCsv}}" style="border:1px solid oklch(0.85 0.02 255);background:white;color:oklch(0.4 0.02 255);font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Exportar Excel</button>
+              <button onClick="{{detail.onExportPdf}}" style="border:1px solid oklch(0.85 0.02 255);background:white;color:oklch(0.4 0.02 255);font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Exportar PDF</button>
+            </div>
+          </div>
+        </div>
+
+        <sc-if value="{{detail.partialNote}}" hint-placeholder-val="{{false}}">
+          <div style="font-size:13px;color:oklch(0.5 0.13 80);font-weight:600;background:oklch(0.96 0.05 85);padding:10px 14px;border-radius:11px;margin-bottom:20px">{{ detail.partialNote }}</div>
+        </sc-if>
+
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:18px">
+          <div style="flex:1;min-width:260px;background:white;border-radius:18px;padding:20px 22px;border:1px solid oklch(0.91 0.01 255)">
+            <div style="font-family:Sora,sans-serif;font-weight:700;font-size:14.5px;margin-bottom:12px">Variable del mes</div>
+            <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+              <div style="font-family:Sora,sans-serif;font-weight:800;font-size:26px;color:{{brand.accent}}">{{ detail.variable.earnedDisplay }}</div>
+              <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:600">de <sc-if value="{{detail.variable.editable}}" hint-placeholder-val="{{false}}"><input type="number" value="{{detail.variable.monthly}}" onChange="{{detail.variable.onMonthlyChange}}" style="width:80px;border:1px solid oklch(0.85 0.02 255);border-radius:6px;padding:3px 6px;font-family:Inter,sans-serif;font-size:12.5px"/></sc-if><sc-if value="{{detail.variable.readOnlyMonthly}}" hint-placeholder-val="{{true}}"><span>{{ detail.variable.monthlyDisplay }}</span></sc-if> bono mensual ({{ detail.variable.pctDisplay }})</div>
+            </div>
+            <div style="font-size:12px;color:oklch(0.55 0.02 255);margin-top:8px">{{ detail.variable.accumDisplay }}</div>
+          </div>
+          <div style="flex:1.4;min-width:300px;background:white;border-radius:18px;padding:20px 22px;border:1px solid oklch(0.91 0.01 255)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+              <div style="font-family:Sora,sans-serif;font-weight:700;font-size:14.5px">Revisión de medio de mes</div>
+              <sc-if value="{{detail.midReview.editable}}" hint-placeholder-val="{{false}}">
+                <div style="display:flex;gap:6px">
+                  <sc-for list="{{detail.midReview.statusOptions}}" as="opt" hint-placeholder-count="3">
+                    <button onClick="{{opt.onClick}}" style="border:1px solid oklch(0.85 0.02 255);background:{{opt.bg}};color:{{opt.color}};font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:99px;cursor:pointer;font-family:Inter,sans-serif">{{ opt.label }}</button>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <div style="font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:99px;background:{{detail.midReview.statusBg}};color:{{detail.midReview.statusColor}}">{{ detail.midReview.statusLabel }}</div>
+            </div>
+            <sc-if value="{{detail.midReview.editable}}" hint-placeholder-val="{{false}}">
+              <textarea placeholder="Qué le falta para cerrar bien el mes…" value="{{detail.midReview.note}}" onChange="{{detail.midReview.onNoteChange}}" style="width:100%;border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:9px 11px;font-family:Inter,sans-serif;font-size:12.5px;resize:vertical;min-height:44px"></textarea>
+            </sc-if>
+            <sc-if value="{{detail.midReview.hasContent}}" hint-placeholder-val="{{false}}">
+              <div style="font-size:12.5px;color:oklch(0.4 0.02 255);line-height:1.5">“{{ detail.midReview.note }}”</div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="background:white;border-radius:18px;padding:22px;border:1px solid oklch(0.91 0.01 255);margin-bottom:24px">
+          <div style="font-family:Sora,sans-serif;font-weight:700;font-size:15px;margin-bottom:14px">Tendencia histórica</div>
+          <svg viewBox="0 0 620 130" style="width:100%;height:130px;display:block">
+            <polyline points="{{detail.chartPoints}}" fill="none" stroke="{{brand.accent}}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
+            <sc-for list="{{detail.chartDots}}" as="d" hint-placeholder-count="6">
+              <circle cx="{{d.cx}}" cy="{{d.cy}}" r="4.5" fill="{{d.fill}}" stroke="white" stroke-width="2"></circle>
+            </sc-for>
+            <sc-for list="{{detail.chartLabels}}" as="l" hint-placeholder-count="6">
+              <text x="{{l.x}}" y="122" font-size="11" fill="oklch(0.55 0.02 255)" text-anchor="middle" font-family="Inter, sans-serif">{{ l.text }}</text>
+            </sc-for>
+          </svg>
+        </div>
+
+        <div style="background:white;border-radius:18px;padding:22px;border:1px solid oklch(0.91 0.01 255);margin-bottom:24px">
+          <div style="font-family:Sora,sans-serif;font-weight:700;font-size:15px;margin-bottom:14px">Plan de mejora · {{ selectedMonthLabel }}</div>
+          <sc-if value="{{detail.plan.empty}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:13px;color:oklch(0.55 0.02 255)">Sin acciones registradas para este mes.</div>
+          </sc-if>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{detail.plan.items}}" as="item" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:oklch(0.97 0.006 255);border-radius:11px">
+                <input type="checkbox" checked="{{item.done}}" onChange="{{item.onToggle}}" disabled="{{item.disabledAttr}}" style="width:17px;height:17px;flex:none"/>
+                <div style="flex:1;font-size:13px;text-decoration:{{item.doneDecoration}};color:{{item.textColor}}">{{ item.text }}</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 255);flex:none">{{ item.dueDisplay }}</div>
+                <sc-if value="{{item.canDelete}}" hint-placeholder-val="{{false}}">
+                  <button onClick="{{item.onDelete}}" style="border:none;background:none;color:oklch(0.6 0.1 25);cursor:pointer;font-size:16px;line-height:1;flex:none">×</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{detail.plan.canAdd}}" hint-placeholder-val="{{false}}">
+            <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+              <input placeholder="Nueva acción de mejora…" value="{{detail.plan.newText}}" onChange="{{detail.plan.onNewTextChange}}" style="flex:1;min-width:200px;border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-family:Inter,sans-serif;font-size:13px"/>
+              <input type="date" value="{{detail.plan.newDue}}" onChange="{{detail.plan.onNewDueChange}}" style="border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-family:Inter,sans-serif;font-size:13px"/>
+              <button onClick="{{detail.plan.onAdd}}" style="border:none;background:{{brand.accent}};color:white;font-size:13px;font-weight:700;padding:8px 16px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Agregar</button>
+            </div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{detail.canEditKpis}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+            <button onClick="{{detail.toggleEditKpis}}" style="border:1px solid oklch(0.85 0.02 255);background:{{detail.editBtnBg}};color:{{detail.editBtnColor}};font-size:13px;font-weight:700;padding:9px 16px;border-radius:10px;cursor:pointer;font-family:Inter,sans-serif">{{ detail.editKpisLabel }}</button>
+          </div>
+        </sc-if>
+
+        <sc-for list="{{detail.categories}}" as="cat" hint-placeholder-count="3">
+          <div style="background:white;border-radius:18px;border:1px solid oklch(0.91 0.01 255);margin-bottom:18px;overflow:hidden">
+            <div style="padding:16px 22px;background:oklch(0.97 0.006 255);border-bottom:1px solid oklch(0.91 0.01 255);display:flex;justify-content:space-between;align-items:center">
+              <div style="font-family:Sora,sans-serif;font-weight:700;font-size:14.5px;text-transform:uppercase;letter-spacing:0.03em">{{ cat.name }}</div>
+              <div style="font-size:12.5px;font-weight:700;color:oklch(0.5 0.02 255)">{{ cat.earnedDisplay }} / {{ cat.maxWeight }} pts</div>
+            </div>
+            <div>
+              <sc-for list="{{cat.kpis}}" as="kpi" hint-placeholder-count="3">
+                <div style="padding:18px 22px;border-bottom:1px solid oklch(0.94 0.008 255);display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+                  <div style="flex:1;min-width:240px">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                      <sc-if value="{{kpi.editing}}" hint-placeholder-val="{{false}}">
+                        <input value="{{kpi.name}}" onChange="{{kpi.onNameChange}}" style="font-size:14px;font-weight:600;border:1px solid oklch(0.85 0.02 255);border-radius:7px;padding:5px 8px;font-family:Inter,sans-serif;flex:1"/>
+                      </sc-if>
+                      <sc-if value="{{kpi.notEditing}}" hint-placeholder-val="{{true}}">
+                        <div style="font-size:14px;font-weight:600">{{ kpi.name }}</div>
+                      </sc-if>
+                      <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);background:oklch(0.95 0.01 255);padding:2px 8px;border-radius:99px">{{ kpi.weight }} pts</div>
+                    </div>
+                    <div style="font-size:12.5px;color:oklch(0.48 0.02 255);margin-top:5px;line-height:1.5">{{ kpi.desc }}</div>
+                    <div style="font-size:11.5px;color:oklch(0.6 0.02 255);margin-top:4px;font-style:italic">{{ kpi.considerations }}</div>
+                    <sc-if value="{{kpi.editing}}" hint-placeholder-val="{{false}}">
+                      <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+                        <label style="font-size:12px;font-weight:600;color:oklch(0.5 0.02 255)">Ponderación</label>
+                        <input type="number" min="1" max="50" value="{{kpi.weight}}" onChange="{{kpi.onWeightChange}}" style="width:64px;border:1px solid oklch(0.85 0.02 255);border-radius:7px;padding:5px 8px;font-family:Inter,sans-serif;font-size:13px"/>
+                        <button onClick="{{kpi.onDelete}}" style="border:none;background:oklch(0.95 0.06 25);color:oklch(0.5 0.16 25);font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer">Eliminar</button>
+                      </div>
+                    </sc-if>
+                  </div>
+                  <div style="width:260px;flex:none">
+                    <sc-if value="{{kpi.canScore}}" hint-placeholder-val="{{false}}">
+                      <div style="display:flex;align-items:center;gap:10px">
+                        <input type="range" min="0" max="100" value="{{kpi.sliderVal}}" onChange="{{kpi.onScoreChange}}" style="flex:1;--accent:{{brand.accent}}"/>
+                        <div style="width:38px;text-align:right;font-weight:800;font-size:15px;font-family:Sora,sans-serif;color:{{kpi.scoreColor}}">{{ kpi.scoreDisplay }}</div>
+                      </div>
+                      <textarea placeholder="Comentario de retroalimentación…" value="{{kpi.comment}}" onChange="{{kpi.onCommentChange}}" style="width:100%;margin-top:10px;border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-family:Inter,sans-serif;font-size:12.5px;resize:vertical;min-height:44px"></textarea>
+                    </sc-if>
+                    <sc-if value="{{kpi.readOnly}}" hint-placeholder-val="{{true}}">
+                      <div style="display:flex;align-items:center;gap:10px">
+                        <div style="flex:1;height:8px;background:oklch(0.93 0.01 255);border-radius:99px;overflow:hidden">
+                          <div style="height:100%;border-radius:99px;background:{{kpi.barColor}};width:{{kpi.barPct}}"></div>
+                        </div>
+                        <div style="width:38px;text-align:right;font-weight:800;font-size:15px;font-family:Sora,sans-serif;color:{{kpi.scoreColor}}">{{ kpi.scoreDisplay }}</div>
+                      </div>
+                      <sc-if value="{{kpi.showComment}}" hint-placeholder-val="{{false}}">
+                        <div style="margin-top:9px;font-size:12.5px;color:oklch(0.4 0.02 255);background:oklch(0.97 0.006 255);border-radius:9px;padding:9px 11px;line-height:1.5">“{{ kpi.comment }}”</div>
+                      </sc-if>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+              <sc-if value="{{cat.canAdd}}" hint-placeholder-val="{{false}}">
+                <div style="padding:14px 22px">
+                  <button onClick="{{cat.onAddKpi}}" style="border:1.5px dashed oklch(0.8 0.02 255);background:none;color:oklch(0.45 0.03 255);font-size:12.5px;font-weight:700;padding:9px 14px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">+ Agregar KPI</button>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+
+        <div style="background:white;border-radius:18px;padding:22px;border:1px solid oklch(0.91 0.01 255)" data-no-print>
+          <div style="font-family:Sora,sans-serif;font-weight:700;font-size:15px;margin-bottom:14px">Bitácora de cambios</div>
+          <sc-if value="{{detail.hasLogs}}" hint-placeholder-val="{{false}}">
+            <div style="display:flex;flex-direction:column;gap:9px;max-height:260px;overflow-y:auto">
+              <sc-for list="{{detail.logs}}" as="log" hint-placeholder-count="3">
+                <div style="display:flex;gap:10px;font-size:12.5px;align-items:baseline">
+                  <div style="color:oklch(0.55 0.02 255);flex:none;width:110px">{{ log.when }}</div>
+                  <div style="font-weight:700;color:{{brand.accent}};flex:none">{{ log.roleLabel }}</div>
+                  <div style="color:oklch(0.35 0.02 255)">{{ log.text }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{detail.noLogs}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:13px;color:oklch(0.55 0.02 255)">Sin cambios registrados aún para este ejecutivo.</div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900},&quot;alertThreshold&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:80,&quot;min&quot;:50,&quot;max&quot;:95,&quot;step&quot;:5,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Comportamiento&quot;},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;oklch(0.58 0.19 254)&quot;,&quot;options&quot;:[&quot;oklch(0.58 0.19 254)&quot;,&quot;oklch(0.55 0.19 230)&quot;,&quot;oklch(0.52 0.20 264)&quot;,&quot;oklch(0.6 0.17 245)&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Marca&quot;},&quot;showComments&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Comportamiento&quot;}}">
+const CURRENT_MONTH = '2026-07';
+const MONTHS = [
+  {value:'2026-02',label:'Feb 2026'},
+  {value:'2026-03',label:'Mar 2026'},
+  {value:'2026-04',label:'Abr 2026'},
+  {value:'2026-05',label:'May 2026'},
+  {value:'2026-06',label:'Jun 2026'},
+  {value:'2026-07',label:'Jul 2026'}
+];
+const STORAGE_KEY = 'evolve-kpi-repo-v1';
+const JITTER = [4,-3,2,-5,3,-2,5];
+
+function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+
+function buildKpiList(defs){
+  return defs.map(d => ({ id: d.id, name: d.name, desc: d.desc, considerations: d.considerations, weight: d.weight }));
+}
+
+function seedScores(execId, bases, kpiIds){
+  const scores = {};
+  MONTHS.forEach((m, mi) => {
+    scores[m.value] = {};
+    kpiIds.forEach((id, ki) => {
+      if (m.value === CURRENT_MONTH) { scores[m.value][id] = { score: null, comment: '' }; return; }
+      const base = bases[m.value];
+      const val = clamp(Math.round(base + JITTER[ki % JITTER.length]), 0, 100);
+      scores[m.value][id] = { score: val, comment: '' };
+    });
+  });
+  return scores;
+}
+
+class Component extends DCLogic {
+  state = {
+    role: 'manager',
+    view: 'home',
+    currentExecId: null,
+    ejecutivoViewId: 'daniela',
+    selectedMonth: CURRENT_MONTH,
+    editingKpis: false,
+    data: null
+  };
+
+  constructor(props){
+    super(props);
+    this.state.data = this.loadData();
+  }
+
+  buildDefaultData(){
+    const daniela = {
+      id:'daniela', name:'Daniela Mena Rosales', roleLabel:'Promotoría Fija · Bepensa', client:'BEPENSA',
+      categories: [
+        { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
+          {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 90% de días efectivos al mes.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
+          {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega primeros 5 días hábiles del mes.', considerations:'Enviar soporte del 1 al 5 del mes.', weight:15},
+          {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'Enviar reporte de iniciativa corporativa para Bepensa o Evolve.', weight:10},
+          {id:'g4', name:'Envío y carga de plan de trabajo mensual', desc:'Entrega primeros 5 días.', considerations:'Para obtener la cobertura real a fin de mes.', weight:10},
+          {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Análisis de cobertura semanal, riesgos por área y visibilidad por región.', weight:10},
+          {id:'g6', name:'Entrega de reporte de cierre mensual Evolve', desc:'Entrega primeros 8 días.', considerations:'"Sello Evo": rotación, apego al plan, ventas, exhibiciones e iniciativas.', weight:20}
+        ])},
+        { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
+          {id:'c1', name:'Satisfacción del cliente', desc:'Calificación en revisiones periódicas / relación con coordinadores y supervisores.', considerations:'Sin molestias o comentarios negativos durante el mes.', weight:5},
+          {id:'c2', name:'Auditorías aprobadas', desc:'% de supervisiones con resultado satisfactorio.', considerations:'Revisión de master y plan de trabajo vs HC/presupuesto.', weight:5}
+        ])},
+        { id:'admin', name:'Administración', kpis: buildKpiList([
+          {id:'a1', name:'Precisión en nómina', desc:'Incidencias de nómina correctas / total × 100.', considerations:'Cero errores, bonos en tiempo y forma.', weight:5},
+          {id:'a2', name:'Comprobación de gastos', desc:'Facturas en portal / sin gastos con más de 10 días sin comprobar.', considerations:'Facturas en portal a tiempo.', weight:15}
+        ])}
+      ]
+    };
+    const edgar = {
+      id:'edgar', name:'Edgar Alan Obregón García', roleLabel:'Impulsores de Venta · Bepensa', client:'BEPENSA',
+      categories: [
+        { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
+          {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 85% de días efectivos respecto a la activación.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
+          {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega primeros 5 días hábiles.', considerations:'Enviar del 1 al 5 para revisión y homologación.', weight:15},
+          {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'A total proyectos, del 1 al 5 de cada mes.', weight:10},
+          {id:'g4', name:'Envío de reporte semanal de activación', desc:'Martes a semana vencida.', considerations:'Al haber culminado los días de activación.', weight:10},
+          {id:'g5', name:'Salida de campo y hallazgos (reporte)', desc:'Dos salidas mensuales con reporte de valor para el cliente.', considerations:'Enviar primeros 5 días.', weight:15},
+          {id:'g6', name:'Entrega de cierre de proyecto', desc:'Entrega primeros 3 días hábiles tras terminar el proyecto.', considerations:'Hallazgos, ventas, casos de éxito y mejoras.', weight:20}
+        ])},
+        { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
+          {id:'c1', name:'Auditorías aprobadas', desc:'% de supervisiones con resultado satisfactorio.', considerations:'Revisión de master y plan de trabajo vs HC/presupuesto.', weight:5}
+        ])},
+        { id:'admin', name:'Administración', kpis: buildKpiList([
+          {id:'a1', name:'Precisión en nómina', desc:'Incidencias de nómina correctas / total × 100.', considerations:'Cero errores, bonos en tiempo y forma.', weight:5},
+          {id:'a2', name:'Comprobación de gastos', desc:'Facturas en portal / sin gastos con más de 10 días sin comprobar.', considerations:'Facturas en portal a tiempo.', weight:15}
+        ])}
+      ]
+    };
+    const marifer = {
+      id:'marifer', name:'María Fernanda Quintanar', roleLabel:'Ejecutivo de Cuenta · Gifan', client:'GIFAN',
+      categories: [
+        { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
+          {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 90% de días efectivos al mes.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
+          {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega primeros 5 días hábiles.', considerations:'Enviar soporte del 1 al 5 del mes.', weight:15},
+          {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'Para Gifan o para Evolve.', weight:10},
+          {id:'g4', name:'Envío y carga de plan de trabajo mensual', desc:'Entrega primeros 5 días.', considerations:'Para obtener la cobertura real a fin de mes.', weight:10},
+          {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Riesgos por área y visibilidad por región.', weight:10},
+          {id:'g6', name:'Envío de reportes mensuales al cliente', desc:'Entrega primeros 5 días (Smiley Kids, Cristalinas, etc.).', considerations:'Reportes solicitados por el cliente.', weight:15},
+          {id:'g7', name:'Entrega de reporte de cierre mensual Evolve', desc:'Entrega primeros 8 días.', considerations:'"Sello Evo": rotación, apego al plan, ventas, exhibiciones e iniciativas.', weight:20}
+        ])},
+        { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
+          {id:'c1', name:'Satisfacción del cliente', desc:'Calificación en revisiones periódicas / relación con coordinadores y supervisores.', considerations:'Sin molestias o comentarios negativos durante el mes.', weight:5},
+          {id:'c2', name:'Auditorías aprobadas', desc:'% de supervisiones con resultado satisfactorio.', considerations:'Revisión de master y plan de trabajo vs HC/presupuesto.', weight:5}
+        ])},
+        { id:'admin', name:'Administración', kpis: buildKpiList([
+          {id:'a1', name:'Precisión en nómina', desc:'Incidencias de nómina correctas / total × 100.', considerations:'Cero errores, bonos en tiempo y forma.', weight:5}
+        ])}
+      ]
+    };
+
+    daniela.monthlyVariable = 8000;
+    edgar.monthlyVariable = 8000;
+    marifer.monthlyVariable = 7000;
+
+    const execs = [daniela, edgar, marifer];
+    const bases = {
+      daniela: {'2026-02':76,'2026-03':80,'2026-04':85,'2026-05':88,'2026-06':91},
+      edgar:   {'2026-02':85,'2026-03':80,'2026-04':75,'2026-05':68,'2026-06':72},
+      marifer: {'2026-02':74,'2026-03':78,'2026-04':81,'2026-05':85,'2026-06':84}
+    };
+    const scores = {};
+    execs.forEach(ex => {
+      const kpiIds = [];
+      ex.categories.forEach(c => c.kpis.forEach(k => kpiIds.push(k.id)));
+      scores[ex.id] = seedScores(ex.id, bases[ex.id], kpiIds);
+    });
+    scores.daniela['2026-06'].g6.comment = 'Reporte de cierre completo y a tiempo, buen detalle en iniciativas. Sigue así.';
+    scores.edgar['2026-06'].g6.comment = 'El cierre llegó con 2 días de retraso, ajustar para el próximo proyecto.';
+    scores.marifer['2026-06'].g7.comment = 'Buen nivel de detalle, falta incluir comparativo de ventas vs. mes anterior.';
+
+    const midReviews = {
+      daniela: { '2026-06': { note:'En buen camino, cuidar el detalle en el reporte de iniciativas.', status:'ok' } },
+      edgar: { '2026-06': { note:'Cierre de proyecto llegó tarde el mes pasado, seguimiento puntual esta semana para no repetirlo.', status:'atencion' } },
+      marifer: { '2026-06': { note:'Buen ritmo general, falta reforzar comparativo de ventas en reportes al cliente.', status:'ok' } }
+    };
+
+    const plans = {
+      daniela: { '2026-06': [ { id:'p1', text:'Reforzar seguimiento de plan de trabajo antes del día 5', due:'2026-07-05', done:true } ] },
+      edgar: { '2026-06': [ { id:'p1', text:'Adelantar cierre de proyecto 1 día para evitar retrasos', due:'2026-07-10', done:false } ] },
+      marifer: { '2026-06': [ { id:'p1', text:'Agregar comparativo de ventas al reporte mensual', due:'2026-07-08', done:false } ] }
+    };
+    const acks = { daniela:{}, edgar:{}, marifer:{} };
+    const logs = [
+      { ts: new Date('2026-06-29T10:15:00').getTime(), execId:'daniela', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' },
+      { ts: new Date('2026-06-29T10:20:00').getTime(), execId:'edgar', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' },
+      { ts: new Date('2026-06-29T10:25:00').getTime(), execId:'marifer', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' }
+    ];
+
+    return { executives: execs, scores, midReviews, plans, acks, logs };
+  }
+
+  loadData(){
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return this.buildDefaultData();
+  }
+
+  saveData(data){
+    this.setState({ data });
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+  }
+
+  statusFor(score){
+    if (score === null || score === undefined) return { label:'Pendiente', color:'oklch(0.5 0.02 255)', bg:'oklch(0.93 0.01 255)' };
+    if (score >= 90) return { label:'Excelente', color:'oklch(0.42 0.13 150)', bg:'oklch(0.94 0.05 150)' };
+    if (score >= 75) return { label:'Bien', color:'oklch(0.42 0.15 254)', bg:'oklch(0.94 0.035 254)' };
+    const threshold = this.props.alertThreshold ?? 80;
+    if (score >= 60) return { label: score < threshold ? 'En riesgo' : 'Bien', color: score < threshold ? 'oklch(0.5 0.14 80)' : 'oklch(0.42 0.15 254)', bg: score < threshold ? 'oklch(0.94 0.08 85)' : 'oklch(0.94 0.035 254)' };
+    return { label:'Crítico', color:'oklch(0.5 0.18 25)', bg:'oklch(0.94 0.06 25)' };
+  }
+
+  computeTotal(exec, month){
+    const monthScores = this.state.data.scores[exec.id][month] || {};
+    let earned = 0, filled = 0, total = 0;
+    exec.categories.forEach(cat => cat.kpis.forEach(k => {
+      total++;
+      const s = monthScores[k.id];
+      if (s && s.score !== null && s.score !== undefined) { earned += k.weight * (s.score/100); filled++; }
+    }));
+    return { earned: Math.round(earned), filled, total, isComplete: filled === total, isEmpty: filled === 0 };
+  }
+
+  latestCompletedMonth(exec, uptoMonth){
+    const idx = MONTHS.findIndex(m => m.value === uptoMonth);
+    for (let i = idx; i >= 0; i--){
+      const t = this.computeTotal(exec, MONTHS[i].value);
+      if (t.isComplete) return { month: MONTHS[i], total: t };
+    }
+    return null;
+  }
+
+  findKpi(data, execId, kpiId){
+    const exec = data.executives.find(e => e.id === execId);
+    for (const cat of exec.categories){
+      const kpi = cat.kpis.find(k => k.id === kpiId);
+      if (kpi) return { kpi, cat };
+    }
+    return { kpi:null, cat:null };
+  }
+
+  addLog(data, execId, month, text){
+    if (!data.logs) data.logs = [];
+    data.logs.unshift({ ts: Date.now(), execId, month, role: this.state.role, text });
+    if (data.logs.length > 300) data.logs.length = 300;
+  }
+
+  setScore(execId, month, kpiId, val){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.scores[execId][month]) data.scores[execId][month] = {};
+    if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score:null, comment:'' };
+    data.scores[execId][month][kpiId].score = val;
+    const { kpi } = this.findKpi(data, execId, kpiId);
+    this.addLog(data, execId, month, `Calificó "${kpi ? kpi.name : kpiId}" con ${val} pts`);
+    this.saveData(data);
+  }
+
+  setComment(execId, month, kpiId, val){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.scores[execId][month]) data.scores[execId][month] = {};
+    if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score:null, comment:'' };
+    data.scores[execId][month][kpiId].comment = val;
+    this.saveData(data);
+  }
+
+  setWeight(execId, catId, kpiId, val){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    const exec = data.executives.find(e => e.id === execId);
+    const cat = exec.categories.find(c => c.id === catId);
+    const kpi = cat.kpis.find(k => k.id === kpiId);
+    kpi.weight = clamp(parseInt(val)||0, 1, 50);
+    this.addLog(data, execId, this.state.selectedMonth, `Cambió ponderación de "${kpi.name}" a ${kpi.weight} pts`);
+    this.saveData(data);
+  }
+
+  setKpiName(execId, catId, kpiId, val){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    const cat = data.executives.find(e => e.id === execId).categories.find(c => c.id === catId);
+    cat.kpis.find(k => k.id === kpiId).name = val;
+    this.saveData(data);
+  }
+
+  deleteKpi(execId, catId, kpiId){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    const cat = data.executives.find(e => e.id === execId).categories.find(c => c.id === catId);
+    const kpi = cat.kpis.find(k => k.id === kpiId);
+    cat.kpis = cat.kpis.filter(k => k.id !== kpiId);
+    MONTHS.forEach(m => { if (data.scores[execId][m.value]) delete data.scores[execId][m.value][kpiId]; });
+    this.addLog(data, execId, this.state.selectedMonth, `Eliminó KPI "${kpi ? kpi.name : kpiId}"`);
+    this.saveData(data);
+  }
+
+  setMonthlyVariable(execId, val){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    const v = clamp(parseInt(val)||0, 0, 1000000);
+    data.executives.find(e => e.id === execId).monthlyVariable = v;
+    this.addLog(data, execId, this.state.selectedMonth, `Actualizó bono variable mensual a $${v.toLocaleString('es-MX')}`);
+    this.saveData(data);
+  }
+
+  setMidReview(execId, month, patch){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.midReviews) data.midReviews = {};
+    if (!data.midReviews[execId]) data.midReviews[execId] = {};
+    const current = data.midReviews[execId][month] || { note:'', status:'ok' };
+    data.midReviews[execId][month] = { ...current, ...patch };
+    if (patch.status) this.addLog(data, execId, month, `Actualizó revisión de medio de mes a "${patch.status}"`);
+    else this.addLog(data, execId, month, `Editó nota de revisión de medio de mes`);
+    this.saveData(data);
+  }
+
+  addPlanItem(execId, month, text, due){
+    if (!text || !text.trim()) return;
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.plans) data.plans = {};
+    if (!data.plans[execId]) data.plans[execId] = {};
+    if (!data.plans[execId][month]) data.plans[execId][month] = [];
+    data.plans[execId][month].push({ id:'pi'+Date.now(), text: text.trim(), due: due||'', done:false });
+    this.addLog(data, execId, month, `Agregó acción de plan de mejora: "${text.trim()}"`);
+    this.saveData(data);
+    this.setState({ newPlanText:'', newPlanDue:'' });
+  }
+
+  togglePlanItem(execId, month, itemId){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    const item = data.plans[execId][month].find(i => i.id === itemId);
+    item.done = !item.done;
+    this.addLog(data, execId, month, `Marcó acción "${item.text}" como ${item.done ? 'completada' : 'pendiente'}`);
+    this.saveData(data);
+  }
+
+  deletePlanItem(execId, month, itemId){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    const item = data.plans[execId][month].find(i => i.id === itemId);
+    data.plans[execId][month] = data.plans[execId][month].filter(i => i.id !== itemId);
+    this.addLog(data, execId, month, `Eliminó acción de plan de mejora: "${item ? item.text : ''}"`);
+    this.saveData(data);
+  }
+
+  signAck(execId, month){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.acks) data.acks = {};
+    if (!data.acks[execId]) data.acks[execId] = {};
+    data.acks[execId][month] = { ackedAt: Date.now() };
+    this.addLog(data, execId, month, `Firmó acuse de recibido de su retroalimentación`);
+    this.saveData(data);
+  }
+
+  exportCsv(exec, month, monthLabel, total, variableEarned){
+    const rows = [['Categoría','KPI','Ponderación','Score','Comentario']];
+    exec.categories.forEach(cat => cat.kpis.forEach(k => {
+      const rec = (this.state.data.scores[exec.id][month] || {})[k.id] || {};
+      rows.push([cat.name, k.name, k.weight, rec.score ?? '', (rec.comment||'').replace(/\n/g,' ')]);
+    }));
+    rows.push([]);
+    rows.push(['Puntuación total', '', '', total ?? 'Pendiente', '']);
+    rows.push(['Variable ganado', '', '', variableEarned ?? 'Pendiente', '']);
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `KPI_${exec.name.replace(/\s+/g,'_')}_${month}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  addKpi(execId, catId){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    const cat = data.executives.find(e => e.id === execId).categories.find(c => c.id === catId);
+    const newId = catId[0] + (cat.kpis.length + 1) + '_' + Date.now();
+    cat.kpis.push({ id: newId, name:'Nuevo KPI', desc:'Describe el indicador.', considerations:'', weight:5 });
+    MONTHS.forEach(m => { if (!data.scores[execId][m.value]) data.scores[execId][m.value] = {}; data.scores[execId][m.value][newId] = { score: m.value === CURRENT_MONTH ? null : 0, comment:'' }; });
+    this.saveData(data);
+  }
+
+  renderVals(){
+    const s = this.state;
+    const data = s.data;
+    const accent = this.props.accentColor || 'oklch(0.58 0.19 254)';
+    const showComments = this.props.showComments ?? true;
+    const monthLabelOf = v => (MONTHS.find(m => m.value === v) || {}).label || v;
+    const fmtMoney = n => '$' + Math.round(n).toLocaleString('es-MX');
+
+    const roleTabs = [
+      { key:'manager', label:'Manager' },
+      { key:'jefe', label:'Jefe' },
+      { key:'ejecutivo', label:'Ejecutivo' }
+    ].map(t => ({
+      label: t.label,
+      bg: s.role === t.key ? 'white' : 'transparent',
+      color: s.role === t.key ? accent : 'oklch(0.5 0.02 255)',
+      onClick: () => {
+        const next = { role: t.key, view: t.key === 'ejecutivo' ? 'detail' : 'home', editingKpis: false };
+        if (t.key === 'ejecutivo') next.currentExecId = s.ejecutivoViewId;
+        this.setState(next);
+      }
+    }));
+
+    const execCards = data.executives.map(exec => {
+      const totalNow = this.computeTotal(exec, s.selectedMonth);
+      const showTotal = totalNow.isComplete ? totalNow.earned : null;
+      const latest = this.latestCompletedMonth(exec, s.selectedMonth);
+      const displayScore = showTotal !== null ? showTotal : (latest ? latest.total.earned : null);
+      const status = this.statusFor(displayScore);
+      const sparkMonths = MONTHS.filter(m => this.computeTotal(exec, m.value).isComplete);
+      const n = Math.max(sparkMonths.length, 1);
+      const sparkVals = sparkMonths.map(m => this.computeTotal(exec, m.value).earned);
+      const sparkPoints = sparkVals.map((v,i) => `${(i*(280/(n-1||1)))+10},${60 - (v/100*50)}`).join(' ');
+      const sparkDots = sparkVals.map((v,i) => ({ cx:(i*(280/(n-1||1)))+10, cy: 60 - (v/100*50) }));
+      const alertNote = latest && latest.total.earned < (this.props.alertThreshold ?? 80) ? `${latest.month.label}: ${latest.total.earned} pts, por debajo del umbral` : null;
+      const variableDisplay = showTotal !== null ? `${fmtMoney(exec.monthlyVariable * (showTotal/100))} de ${fmtMoney(exec.monthlyVariable)}` : 'Pendiente';
+      return {
+        id: exec.id, name: exec.name, roleLabel: exec.roleLabel, client: exec.client,
+        variableDisplay,
+        totalDisplay: showTotal !== null ? String(showTotal) : '—',
+        totalColor: status.color, statusLabel: status.label, statusBg: status.bg, statusColor: status.color,
+        barPct: (displayScore || 0) + '%',
+        sparkPoints, sparkDots,
+        pendingNote: showTotal === null ? `Pendiente de calificar ${monthLabelOf(s.selectedMonth)}${latest ? ' · último: ' + latest.month.label + ' (' + latest.total.earned + ')' : ''}` : null,
+        alertNote,
+        openHandler: () => this.setState({ view:'detail', currentExecId: exec.id })
+      };
+    });
+
+    const isManagerEditable = s.role === 'manager';
+    let detail = null;
+    if (s.currentExecId){
+      const exec = data.executives.find(e => e.id === s.currentExecId);
+      const totalNow = this.computeTotal(exec, s.selectedMonth);
+      const status = this.statusFor(totalNow.isComplete ? totalNow.earned : (totalNow.isEmpty ? null : totalNow.earned));
+      const chartMonths = MONTHS.map(m => ({ m, t: this.computeTotal(exec, m.value) }));
+      const validVals = chartMonths.filter(x => x.t.isComplete).map(x => x.t.earned);
+      const yFor = v => 100 - (v/100*80);
+      const chartPoints = chartMonths.filter(x => x.t.isComplete).map((x,i,arr) => {
+        const idx = chartMonths.indexOf(x);
+        return `${(idx*(580/(MONTHS.length-1)))+20},${yFor(x.t.earned)}`;
+      }).join(' ');
+      const chartDots = chartMonths.map((x,idx) => x.t.isComplete ? {
+        cx: (idx*(580/(MONTHS.length-1)))+20, cy: yFor(x.t.earned), fill: accent
+      } : null).filter(Boolean);
+      const chartLabels = chartMonths.map((x,idx) => ({ x:(idx*(580/(MONTHS.length-1)))+20, text: x.m.label.split(' ')[0] }));
+
+      const categories = exec.categories.map(cat => {
+        const monthScores = data.scores[exec.id][s.selectedMonth] || {};
+        let earned = 0;
+        const kpis = cat.kpis.map(k => {
+          const rec = monthScores[k.id] || { score:null, comment:'' };
+          const score = rec.score;
+          if (score !== null && score !== undefined) earned += k.weight * (score/100);
+          const kstatus = this.statusFor(score);
+          const editable = isManagerEditable;
+          return {
+            id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight,
+            editing: s.editingKpis && isManagerEditable,
+            notEditing: !(s.editingKpis && isManagerEditable),
+            canScore: editable,
+            readOnly: !editable,
+            sliderVal: score === null || score === undefined ? 0 : score,
+            scoreDisplay: score === null || score === undefined ? '—' : String(score),
+            scoreColor: kstatus.color,
+            barColor: kstatus.color,
+            barPct: (score || 0) + '%',
+            comment: rec.comment || '',
+            showComment: showComments && !!rec.comment,
+            onScoreChange: e => this.setScore(exec.id, s.selectedMonth, k.id, parseInt(e.target.value)),
+            onCommentChange: e => this.setComment(exec.id, s.selectedMonth, k.id, e.target.value),
+            onWeightChange: e => this.setWeight(exec.id, cat.id, k.id, e.target.value),
+            onNameChange: e => this.setKpiName(exec.id, cat.id, k.id, e.target.value),
+            onDelete: () => this.deleteKpi(exec.id, cat.id, k.id)
+          };
+        });
+        return {
+          id: cat.id, name: cat.name,
+          maxWeight: cat.kpis.reduce((a,k)=>a+k.weight,0),
+          earnedDisplay: Math.round(earned),
+          kpis,
+          canAdd: s.editingKpis && isManagerEditable,
+          onAddKpi: () => this.addKpi(exec.id, cat.id)
+        };
+      });
+
+      const variableEarned = totalNow.isComplete ? exec.monthlyVariable * (totalNow.earned/100) : (totalNow.isEmpty ? null : exec.monthlyVariable * (totalNow.earned/100));
+      const completedMonths = MONTHS.filter(m => this.computeTotal(exec, m.value).isComplete);
+      const accumTotal = completedMonths.reduce((sum,m) => sum + exec.monthlyVariable * (this.computeTotal(exec, m.value).earned/100), 0);
+      const variable = {
+        monthly: exec.monthlyVariable,
+        earnedDisplay: variableEarned === null ? 'Pendiente' : fmtMoney(variableEarned),
+        pctDisplay: totalNow.isComplete ? totalNow.earned + '%' : (totalNow.isEmpty ? '—' : Math.round(totalNow.earned) + '% parcial'),
+        editable: isManagerEditable,
+        readOnlyMonthly: !isManagerEditable,
+        monthlyDisplay: fmtMoney(exec.monthlyVariable),
+        onMonthlyChange: e => this.setMonthlyVariable(exec.id, e.target.value),
+        accumDisplay: `${fmtMoney(accumTotal)} acumulado en ${completedMonths.length} mes${completedMonths.length===1?'':'es'} (2026)`
+      };
+
+      const planItems = ((data.plans && data.plans[exec.id] && data.plans[exec.id][s.selectedMonth]) || []).map(item => ({
+        id: item.id, text: item.text, done: item.done,
+        dueDisplay: item.due ? new Date(item.due+'T00:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short'}) : 'Sin fecha',
+        doneDecoration: item.done ? 'line-through' : 'none',
+        textColor: item.done ? 'oklch(0.6 0.02 255)' : 'oklch(0.3 0.02 255)',
+        canToggle: isManagerEditable || s.role === 'ejecutivo',
+        disabledAttr: !(isManagerEditable || s.role === 'ejecutivo'),
+        canDelete: isManagerEditable,
+        onToggle: () => this.togglePlanItem(exec.id, s.selectedMonth, item.id),
+        onDelete: () => this.deletePlanItem(exec.id, s.selectedMonth, item.id)
+      }));
+      const plan = {
+        items: planItems,
+        empty: planItems.length === 0,
+        canAdd: isManagerEditable,
+        newText: s.newPlanText || '',
+        newDue: s.newPlanDue || '',
+        onNewTextChange: e => this.setState({ newPlanText: e.target.value }),
+        onNewDueChange: e => this.setState({ newPlanDue: e.target.value }),
+        onAdd: () => this.addPlanItem(exec.id, s.selectedMonth, s.newPlanText, s.newPlanDue)
+      };
+
+      const ackRec = (data.acks && data.acks[exec.id] && data.acks[exec.id][s.selectedMonth]) || null;
+      const ack = {
+        signed: !!ackRec,
+        label: ackRec ? `Firmado el ${new Date(ackRec.ackedAt).toLocaleDateString('es-MX')}` : 'Pendiente de firma del ejecutivo',
+        color: ackRec ? 'oklch(0.42 0.13 150)' : 'oklch(0.5 0.02 255)',
+        bg: ackRec ? 'oklch(0.94 0.05 150)' : 'oklch(0.94 0.01 255)',
+        canSign: s.role === 'ejecutivo' && !ackRec,
+        onSign: () => this.signAck(exec.id, s.selectedMonth)
+      };
+
+      const execLogs = (data.logs || []).filter(l => l.execId === exec.id).slice(0,25).map(l => ({
+        text: l.text, when: new Date(l.ts).toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }),
+        roleLabel: l.role === 'manager' ? 'Manager' : l.role === 'jefe' ? 'Jefe' : 'Ejecutivo'
+      }));
+
+      const onExportCsv = () => this.exportCsv(exec, s.selectedMonth, monthLabelOf(s.selectedMonth), totalNow.isComplete ? totalNow.earned : null, variableEarned);
+      const onExportPdf = () => window.print();
+
+      const mr = (data.midReviews && data.midReviews[exec.id] && data.midReviews[exec.id][s.selectedMonth]) || { note:'', status:'ok' };
+      const mrStatusMap = { ok:{label:'En curso', color:'oklch(0.42 0.15 254)', bg:'oklch(0.94 0.035 254)'}, atencion:{label:'Atención', color:'oklch(0.5 0.14 80)', bg:'oklch(0.94 0.08 85)'}, riesgo:{label:'Riesgo', color:'oklch(0.5 0.18 25)', bg:'oklch(0.94 0.06 25)'} };
+      const midReview = {
+        note: mr.note,
+        editable: isManagerEditable,
+        statusLabel: mrStatusMap[mr.status].label,
+        statusColor: mrStatusMap[mr.status].color,
+        statusBg: mrStatusMap[mr.status].bg,
+        hasContent: !!mr.note,
+        onNoteChange: e => this.setMidReview(exec.id, s.selectedMonth, { note: e.target.value }),
+        statusOptions: Object.keys(mrStatusMap).map(key => ({
+          key, label: mrStatusMap[key].label,
+          bg: mr.status === key ? mrStatusMap[key].color : 'white',
+          color: mr.status === key ? 'white' : mrStatusMap[key].color,
+          onClick: () => this.setMidReview(exec.id, s.selectedMonth, { status: key })
+        }))
+      };
+
+      let partialNote = null;
+      if (!totalNow.isComplete && !totalNow.isEmpty) partialNote = `Calificación en progreso: faltan ${totalNow.total - totalNow.filled} de ${totalNow.total} KPIs por calificar en ${monthLabelOf(s.selectedMonth)}.`;
+      else if (totalNow.isEmpty && s.selectedMonth === CURRENT_MONTH) partialNote = isManagerEditable ? `Aún no calificas ${monthLabelOf(s.selectedMonth)}. Mueve los controles para comenzar.` : `Tu manager aún no ha calificado ${monthLabelOf(s.selectedMonth)}.`;
+
+      detail = {
+        execId: exec.id,
+        client: exec.client, name: exec.name, roleLabel: exec.roleLabel,
+        totalDisplay: totalNow.isComplete ? String(totalNow.earned) : (totalNow.isEmpty ? '—' : String(Math.round(totalNow.earned))),
+        totalColor: status.color, statusLabel: status.label, statusBg: status.bg, statusColor: status.color,
+        partialNote,
+        chartPoints, chartDots, chartLabels,
+        canEditKpis: isManagerEditable,
+        editingKpis: s.editingKpis,
+        editKpisLabel: s.editingKpis ? 'Listo' : 'Editar KPIs',
+        editBtnBg: s.editingKpis ? accent : 'white',
+        editBtnColor: s.editingKpis ? 'white' : 'oklch(0.4 0.02 255)',
+        toggleEditKpis: () => this.setState({ editingKpis: !s.editingKpis }),
+        variable, midReview, plan, ack, logs: execLogs, hasLogs: execLogs.length > 0, noLogs: execLogs.length === 0,
+        onExportCsv, onExportPdf,
+        categories
+      };
+    }
+
+    const completeCards = execCards.filter(c => c.totalDisplay !== '—');
+    const avgScore = completeCards.length ? Math.round(completeCards.reduce((a,c)=>a+parseInt(c.totalDisplay),0)/completeCards.length) : null;
+    const heroStats = [
+      { value: String(data.executives.length), label: 'Ejecutivos' },
+      { value: avgScore !== null ? String(avgScore) : '—', label: 'Promedio equipo' }
+    ];
+
+    return {
+      brand: { accent },
+      heroStats,
+      roleTabs,
+      isEjecutivoRole: s.role === 'ejecutivo',
+      isJefeRole: s.role === 'jefe',
+      ejecutivoOptions: data.executives.map(e => ({ id:e.id, name:e.name })),
+      ejecutivoViewId: s.ejecutivoViewId,
+      onEjecutivoSelect: e => this.setState({ ejecutivoViewId: e.target.value, currentExecId: e.target.value }),
+      months: MONTHS,
+      selectedMonth: s.selectedMonth,
+      selectedMonthLabel: monthLabelOf(s.selectedMonth),
+      onMonthSelect: e => this.setState({ selectedMonth: e.target.value }),
+      isHome: s.view === 'home',
+      isDetail: s.view === 'detail',
+      showBack: s.role !== 'ejecutivo',
+      goHome: () => this.setState({ view:'home', currentExecId:null, editingKpis:false }),
+      execCards,
+      detail
+    };
+  }
+}
+</script>
+</body>
+</html>
