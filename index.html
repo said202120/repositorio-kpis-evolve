@@ -699,8 +699,8 @@ class Component extends DCLogic {
     const fmtMoney = n => '$' + Math.round(n).toLocaleString('es-MX');
 
     const roleTabs = [
-      { key:'manager', label:'Manager' },
-      { key:'jefe', label:'Jefe' },
+      { key:'manager', label:'Gerente Operaciones' },
+      { key:'jefe', label:'Director Operaciones' },
       { key:'ejecutivo', label:'Ejecutivo' }
     ].map(t => ({
       label: t.label,
@@ -844,7 +844,7 @@ class Component extends DCLogic {
 
       const execLogs = (data.logs || []).filter(l => l.execId === exec.id).slice(0,25).map(l => ({
         text: l.text, when: new Date(l.ts).toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }),
-        roleLabel: l.role === 'manager' ? 'Manager' : l.role === 'jefe' ? 'Jefe' : 'Ejecutivo'
+        roleLabel: l.role === 'manager' ? 'Gerente Operaciones' : l.role === 'jefe' ? 'Director Operaciones' : 'Ejecutivo'
       }));
 
       const onExportCsv = () => this.exportCsv(exec, s.selectedMonth, monthLabelOf(s.selectedMonth), totalNow.isComplete ? totalNow.earned : null, variableEarned);
