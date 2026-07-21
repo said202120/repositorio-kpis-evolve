@@ -179,6 +179,20 @@
               <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:600">de <sc-if value="{{detail.variable.editable}}" hint-placeholder-val="{{false}}"><input type="number" value="{{detail.variable.monthly}}" onChange="{{detail.variable.onMonthlyChange}}" style="width:80px;border:1px solid oklch(0.85 0.02 255);border-radius:6px;padding:3px 6px;font-family:Inter,sans-serif;font-size:12.5px"/></sc-if><sc-if value="{{detail.variable.readOnlyMonthly}}" hint-placeholder-val="{{true}}"><span>{{ detail.variable.monthlyDisplay }}</span></sc-if> bono mensual ({{ detail.variable.pctDisplay }})</div>
             </div>
             <div style="font-size:12px;color:oklch(0.55 0.02 255);margin-top:8px">{{ detail.variable.accumDisplay }}</div>
+            <sc-if value="{{detail.variable.editable}}" hint-placeholder-val="{{false}}">
+              <div style="margin-top:12px;padding-top:12px;border-top:1px solid oklch(0.93 0.01 255)">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <span style="font-size:11.5px;color:oklch(0.5 0.02 255);font-weight:600">Ajuste manual:</span>
+                  <input type="number" placeholder="{{detail.variable.autoDisplay}}" value="{{detail.variable.adjustmentValue}}" onChange="{{detail.variable.onAdjustmentChange}}" style="width:90px;border:1px solid oklch(0.85 0.02 255);border-radius:6px;padding:3px 6px;font-family:Inter,sans-serif;font-size:12.5px"/>
+                  <sc-if value="{{detail.variable.hasAdjustment}}" hint-placeholder-val="{{false}}">
+                    <button onClick="{{detail.variable.onClearAdjustment}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;padding:2px 4px">Quitar</button>
+                  </sc-if>
+                </div>
+                <sc-if value="{{detail.variable.hasAdjustment}}" hint-placeholder-val="{{false}}">
+                  <div style="font-size:11px;color:oklch(0.55 0.02 255);margin-top:4px">Cálculo automático por KPIs: {{ detail.variable.autoDisplay }}</div>
+                </sc-if>
+              </div>
+            </sc-if>
           </div>
           <div style="flex:1.4;min-width:300px;background:white;border-radius:18px;padding:20px 22px;border:1px solid oklch(0.91 0.01 255)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -501,7 +515,7 @@ class Component extends DCLogic {
       { ts: new Date('2026-06-29T10:25:00').getTime(), execId:'marifer', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' }
     ];
 
-    return { executives: execs, scores, midReviews, plans, acks, logs };
+    return { executives: execs, scores, midReviews, plans, acks, logs, variableAdjustments: {} };
   }
 
   loadData(){
@@ -612,6 +626,21 @@ class Component extends DCLogic {
     const v = clamp(parseInt(val)||0, 0, 1000000);
     data.executives.find(e => e.id === execId).monthlyVariable = v;
     this.addLog(data, execId, this.state.selectedMonth, `Actualizó bono variable mensual a $${v.toLocaleString('es-MX')}`);
+    this.saveData(data);
+  }
+
+  setVariableAdjustment(execId, month, val){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.variableAdjustments) data.variableAdjustments = {};
+    if (!data.variableAdjustments[execId]) data.variableAdjustments[execId] = {};
+    if (val === '' || val === null || val === undefined) {
+      delete data.variableAdjustments[execId][month];
+      this.addLog(data, execId, month, `Quitó el ajuste manual del variable, vuelve a cálculo automático`);
+    } else {
+      const v = clamp(parseFloat(val)||0, 0, 1000000);
+      data.variableAdjustments[execId][month] = v;
+      this.addLog(data, execId, month, `Ajustó manualmente el variable del mes a $${v.toLocaleString('es-MX')}`);
+    }
     this.saveData(data);
   }
 
@@ -796,9 +825,16 @@ class Component extends DCLogic {
         };
       });
 
-      const variableEarned = totalNow.isComplete ? exec.monthlyVariable * (totalNow.earned/100) : (totalNow.isEmpty ? null : exec.monthlyVariable * (totalNow.earned/100));
+      const autoVariableEarned = totalNow.isComplete ? exec.monthlyVariable * (totalNow.earned/100) : (totalNow.isEmpty ? null : exec.monthlyVariable * (totalNow.earned/100));
+      const adjustmentRec = data.variableAdjustments && data.variableAdjustments[exec.id] ? data.variableAdjustments[exec.id][s.selectedMonth] : undefined;
+      const hasAdjustment = adjustmentRec !== undefined && adjustmentRec !== null;
+      const variableEarned = hasAdjustment ? adjustmentRec : autoVariableEarned;
       const completedMonths = MONTHS.filter(m => this.computeTotal(exec, m.value).isComplete);
-      const accumTotal = completedMonths.reduce((sum,m) => sum + exec.monthlyVariable * (this.computeTotal(exec, m.value).earned/100), 0);
+      const accumTotal = completedMonths.reduce((sum,m) => {
+        const auto = exec.monthlyVariable * (this.computeTotal(exec, m.value).earned/100);
+        const adj = data.variableAdjustments && data.variableAdjustments[exec.id] ? data.variableAdjustments[exec.id][m.value] : undefined;
+        return sum + (adj !== undefined && adj !== null ? adj : auto);
+      }, 0);
       const variable = {
         monthly: exec.monthlyVariable,
         earnedDisplay: variableEarned === null ? 'Pendiente' : fmtMoney(variableEarned),
@@ -807,6 +843,11 @@ class Component extends DCLogic {
         readOnlyMonthly: !isManagerEditable,
         monthlyDisplay: fmtMoney(exec.monthlyVariable),
         onMonthlyChange: e => this.setMonthlyVariable(exec.id, e.target.value),
+        hasAdjustment,
+        autoDisplay: autoVariableEarned === null ? 'Pendiente' : fmtMoney(autoVariableEarned),
+        adjustmentValue: hasAdjustment ? Math.round(adjustmentRec) : '',
+        onAdjustmentChange: e => this.setVariableAdjustment(exec.id, s.selectedMonth, e.target.value),
+        onClearAdjustment: () => this.setVariableAdjustment(exec.id, s.selectedMonth, null),
         accumDisplay: `${fmtMoney(accumTotal)} acumulado en ${completedMonths.length} mes${completedMonths.length===1?'':'es'} (2026)`
       };
 
