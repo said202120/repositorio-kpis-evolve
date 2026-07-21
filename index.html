@@ -76,6 +76,7 @@
         </select>
         <div style="width:1px;height:22px;background:oklch(0.88 0.01 255)"></div>
         <span style="font-size:12px;color:oklch(0.5 0.02 255);font-weight:600">{{ sessionLabel }}</span>
+        <button onClick="{{onToggleChangePassword}}" style="border:1px solid oklch(0.85 0.02 255);background:white;color:oklch(0.4 0.02 255);font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Cambiar contraseña</button>
         <button onClick="{{onLogout}}" style="border:1px solid oklch(0.85 0.02 255);background:white;color:oklch(0.4 0.02 255);font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Cerrar sesión</button>
       </div>
     </div>
@@ -369,6 +370,29 @@
       </div>
     </sc-if>
   </div>
+
+  <sc-if value="{{showChangePassword}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;inset:0;background:rgba(20,30,50,0.35);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px" data-no-print>
+      <div style="width:100%;max-width:340px;background:white;border-radius:18px;padding:26px 24px;border:1px solid oklch(0.91 0.01 255);box-shadow:0 8px 30px rgba(20,30,50,0.18)">
+        <div style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;margin-bottom:16px">Cambiar contraseña</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <input type="password" placeholder="Contraseña actual" value="{{changePassword.currentPassword}}" onChange="{{changePassword.onCurrentChange}}" style="border:1px solid oklch(0.85 0.02 255);border-radius:10px;padding:9px 11px;font-family:Inter,sans-serif;font-size:13.5px"/>
+          <input type="password" placeholder="Nueva contraseña (mín. 8 caracteres)" value="{{changePassword.newPassword}}" onChange="{{changePassword.onNewChange}}" style="border:1px solid oklch(0.85 0.02 255);border-radius:10px;padding:9px 11px;font-family:Inter,sans-serif;font-size:13.5px"/>
+          <input type="password" placeholder="Confirmar nueva contraseña" value="{{changePassword.confirmPassword}}" onChange="{{changePassword.onConfirmChange}}" style="border:1px solid oklch(0.85 0.02 255);border-radius:10px;padding:9px 11px;font-family:Inter,sans-serif;font-size:13.5px"/>
+          <sc-if value="{{changePassword.error}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:12px;color:oklch(0.5 0.18 25);font-weight:600">{{ changePassword.error }}</div>
+          </sc-if>
+          <sc-if value="{{changePassword.success}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:12px;color:oklch(0.42 0.13 150);font-weight:600">{{ changePassword.success }}</div>
+          </sc-if>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button onClick="{{changePassword.onCancel}}" style="flex:1;border:1px solid oklch(0.85 0.02 255);background:white;color:oklch(0.4 0.02 255);font-weight:700;font-size:13px;padding:9px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Cerrar</button>
+            <button onClick="{{changePassword.onSubmit}}" style="flex:1;border:none;background:{{brand.accent}};color:white;font-weight:700;font-size:13px;padding:9px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">{{ changePassword.submitLabel }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
 </div>
 </sc-if>
 </x-dc>
@@ -420,7 +444,14 @@ class Component extends DCLogic {
     loginUsername: '',
     loginPassword: '',
     loginError: '',
-    loginSubmitting: false
+    loginSubmitting: false,
+    showChangePassword: false,
+    cpCurrent: '',
+    cpNew: '',
+    cpConfirm: '',
+    cpError: '',
+    cpSuccess: '',
+    cpSubmitting: false
   };
 
   constructor(props){
@@ -499,6 +530,43 @@ class Component extends DCLogic {
       role: 'manager', view: 'home', currentExecId: null,
       loginUsername: '', loginPassword: '', loginError: ''
     });
+  }
+
+  toggleChangePassword(){
+    this.setState({
+      showChangePassword: !this.state.showChangePassword,
+      cpCurrent: '', cpNew: '', cpConfirm: '', cpError: '', cpSuccess: ''
+    });
+  }
+
+  submitChangePassword(){
+    const { cpCurrent, cpNew, cpConfirm } = this.state;
+    if (!cpCurrent || !cpNew || !cpConfirm) {
+      this.setState({ cpError: 'Completa todos los campos' });
+      return;
+    }
+    if (cpNew !== cpConfirm) {
+      this.setState({ cpError: 'Las contraseñas nuevas no coinciden' });
+      return;
+    }
+    if (cpNew.length < 8) {
+      this.setState({ cpError: 'La nueva contraseña debe tener al menos 8 caracteres' });
+      return;
+    }
+    this.setState({ cpSubmitting: true, cpError: '' });
+    fetch('/api/change-password', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: cpCurrent, newPassword: cpNew })
+    })
+      .then(async r => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error || 'No se pudo cambiar la contraseña');
+        return body;
+      })
+      .then(() => this.setState({ cpSubmitting: false, cpSuccess: 'Contraseña actualizada correctamente', cpCurrent: '', cpNew: '', cpConfirm: '' }))
+      .catch(err => this.setState({ cpSubmitting: false, cpError: err.message || 'No se pudo cambiar la contraseña' }));
   }
 
   syncRemote(data, action){
@@ -1069,7 +1137,23 @@ class Component extends DCLogic {
       loginButtonLabel: s.loginSubmitting ? 'Entrando…' : 'Entrar',
       onLoginUsernameChange: e => this.setState({ loginUsername: e.target.value }),
       onLoginPasswordChange: e => this.setState({ loginPassword: e.target.value }),
-      onLoginSubmit: () => this.submitLogin()
+      onLoginSubmit: () => this.submitLogin(),
+
+      showChangePassword: s.showChangePassword,
+      onToggleChangePassword: () => this.toggleChangePassword(),
+      changePassword: {
+        currentPassword: s.cpCurrent,
+        newPassword: s.cpNew,
+        confirmPassword: s.cpConfirm,
+        error: s.cpError,
+        success: s.cpSuccess,
+        submitLabel: s.cpSubmitting ? 'Guardando…' : 'Guardar',
+        onCurrentChange: e => this.setState({ cpCurrent: e.target.value }),
+        onNewChange: e => this.setState({ cpNew: e.target.value }),
+        onConfirmChange: e => this.setState({ cpConfirm: e.target.value }),
+        onCancel: () => this.toggleChangePassword(),
+        onSubmit: () => this.submitChangePassword()
+      }
     };
   }
 }
