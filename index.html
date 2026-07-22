@@ -42,6 +42,21 @@
     .login-panel-brand{flex:1 1 380px;position:relative;overflow:hidden;padding:44px 40px;display:flex;flex-direction:column;justify-content:space-between;
       background:linear-gradient(160deg, oklch(0.58 0.19 254), oklch(0.32 0.15 262))}
     @media (max-width:760px){ .login-panel-brand{display:none} .login-card{max-width:420px;min-height:auto} }
+
+    @keyframes detailDrift{ 0%,100%{ transform:translate(0,0) } 50%{ transform:translate(-22px,16px) } }
+    @keyframes detailDrift2{ 0%,100%{ transform:translate(0,0) } 50%{ transform:translate(20px,-14px) } }
+    @keyframes detailPulse{ 0%,100%{ opacity:.10; transform:translateY(0) } 50%{ opacity:.22; transform:translateY(-6px) } }
+    .detail-bg{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;
+      background:
+        radial-gradient(circle at 6% -8%, oklch(0.9 0.06 254 / 0.55), transparent 40%),
+        radial-gradient(circle at 98% 6%, oklch(0.9 0.05 258 / 0.45), transparent 38%),
+        radial-gradient(circle at 45% 108%, oklch(0.92 0.04 250 / 0.4), transparent 42%),
+        oklch(0.98 0.004 255)}
+    .detail-bg::before, .detail-bg::after{content:'';position:absolute;border-radius:50%;filter:blur(1px)}
+    .detail-bg::before{width:480px;height:480px;top:-160px;left:-140px;background:oklch(0.9 0.07 254 / 0.35);animation:detailDrift 24s ease-in-out infinite}
+    .detail-bg::after{width:400px;height:400px;bottom:-140px;right:-110px;background:oklch(0.9 0.06 262 / 0.3);animation:detailDrift2 28s ease-in-out infinite}
+    .detail-dotgrid{position:absolute;inset:0;background-image:radial-gradient(oklch(0.5 0.1 254 / 0.13) 1.5px, transparent 1.5px);background-size:32px 32px}
+    .detail-icon{position:absolute;font-size:38px;color:oklch(0.5 0.1 254);animation:detailPulse 7s ease-in-out infinite}
   </style>
 </helmet>
 
@@ -233,7 +248,15 @@
     </sc-if>
 
     <sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
-      <div data-screen-label="Detalle ejecutivo">
+      <div class="detail-bg" data-no-print>
+        <div class="detail-dotgrid"></div>
+        <div class="detail-icon" style="top:12%;left:4%;animation-delay:.2s">📊</div>
+        <div class="detail-icon" style="top:60%;left:2%;animation-delay:2.4s">🎯</div>
+        <div class="detail-icon" style="top:20%;right:4%;animation-delay:1.1s">📈</div>
+        <div class="detail-icon" style="top:70%;right:3%;animation-delay:3.2s">✅</div>
+        <div class="detail-icon" style="top:88%;left:14%;animation-delay:4s">🗓️</div>
+      </div>
+      <div data-screen-label="Detalle ejecutivo" style="position:relative;z-index:1">
         <sc-if value="{{showBack}}" hint-placeholder-val="{{false}}">
           <button onClick="{{goHome}}" style="border:none;background:none;color:oklch(0.5 0.02 255);font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:16px;display:flex;align-items:center;gap:6px">← Volver al resumen</button>
         </sc-if>
@@ -377,6 +400,7 @@
               <sc-for list="{{cat.kpis}}" as="kpi" hint-placeholder-count="3">
                 <div style="padding:18px 22px;border-bottom:1px solid oklch(0.94 0.008 255)">
                 <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+                  <div style="width:38px;height:38px;border-radius:11px;background:oklch(0.95 0.03 254);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none">{{ kpi.icon }}</div>
                   <div style="flex:1;min-width:240px">
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                       <sc-if value="{{kpi.editing}}" hint-placeholder-val="{{false}}">
@@ -848,6 +872,25 @@ class Component extends DCLogic {
     return null;
   }
 
+  kpiIcon(name){
+    const n = (name || '').toLowerCase();
+    if (n.includes('ausentismo')) return '🗓️';
+    if (n.includes('soporte') && n.includes('nómina')) return '🧾';
+    if (n.includes('iniciativa')) return '📊';
+    if (n.includes('plan de trabajo')) return '🗂️';
+    if (n.includes('semana vencida') || n.includes('cobertura')) return '🗺️';
+    if (n.includes('cierre mensual')) return '🏁';
+    if (n.includes('activación')) return '📈';
+    if (n.includes('salida de campo') || n.includes('hallazgos')) return '🧭';
+    if (n.includes('cierre de proyecto')) return '📦';
+    if (n.includes('satisfacción')) return '😊';
+    if (n.includes('auditoría')) return '🔍';
+    if (n.includes('precisión') && n.includes('nómina')) return '💵';
+    if (n.includes('comprobación de gastos')) return '🧮';
+    if (n.includes('reporte') && n.includes('cliente')) return '📤';
+    return '🎯';
+  }
+
   statusFor(score){
     if (score === null || score === undefined) return { label:'Pendiente', color:'oklch(0.5 0.02 255)', bg:'oklch(0.93 0.01 255)' };
     if (score >= 90) return { label:'Excelente', color:'oklch(0.42 0.13 150)', bg:'oklch(0.94 0.05 150)' };
@@ -1172,7 +1215,7 @@ class Component extends DCLogic {
           const editable = isManagerEditable;
           const attachment = rec.attachment || null;
           return {
-            id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight,
+            id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight, icon: this.kpiIcon(k.name),
             editing: s.editingKpis && isManagerEditable,
             notEditing: !(s.editingKpis && isManagerEditable),
             canScore: editable,
