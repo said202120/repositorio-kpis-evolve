@@ -39,6 +39,20 @@ function pushLog(data, execId, month, role, text) {
   if (data.logs.length > 300) data.logs.length = 300;
 }
 
+function ensureScoreRec(data, execId, month, kpiId) {
+  if (!data.scores) data.scores = {};
+  if (!data.scores[execId]) data.scores[execId] = {};
+  if (!data.scores[execId][month]) data.scores[execId][month] = {};
+  if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score: null, comment: '' };
+  return data.scores[execId][month][kpiId];
+}
+
+// Attachments ride inside the shared JSON blob (no separate object storage
+// configured), so cap them well under Vercel's ~4.5MB serverless request
+// body limit once base64 overhead (~37%) is accounted for.
+const MAX_ATTACHMENT_DATA_URL_LENGTH = 3.5 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_EXT = /\.(xlsx|xls|pdf|ppt|pptx)$/i;
+
 module.exports = async (req, res) => {
   const session = getSession(req);
   if (!session) {
@@ -103,6 +117,37 @@ module.exports = async (req, res) => {
         if (!data.acks[execId]) data.acks[execId] = {};
         data.acks[execId][action.month] = { ackedAt: Date.now() };
         pushLog(data, execId, action.month, 'ejecutivo', 'Firmó acuse de recibido de su retroalimentación');
+      } else if (action.type === 'setExecComment') {
+        const rec = ensureScoreRec(data, execId, action.month, action.kpiId);
+        rec.execComment = typeof action.execComment === 'string' ? action.execComment.slice(0, 4000) : '';
+        pushLog(data, execId, action.month, 'ejecutivo', 'Comentó en un KPI');
+      } else if (action.type === 'uploadFile') {
+        const att = action.attachment;
+        if (!att || typeof att.name !== 'string' || typeof att.dataUrl !== 'string') {
+          res.status(400).json({ error: 'Archivo inválido' });
+          return;
+        }
+        if (!ALLOWED_ATTACHMENT_EXT.test(att.name)) {
+          res.status(400).json({ error: 'Solo se permiten archivos Excel, PDF o PowerPoint' });
+          return;
+        }
+        if (att.dataUrl.length > MAX_ATTACHMENT_DATA_URL_LENGTH) {
+          res.status(413).json({ error: 'El archivo no debe superar 2.5 MB' });
+          return;
+        }
+        const rec = ensureScoreRec(data, execId, action.month, action.kpiId);
+        rec.attachment = {
+          name: att.name,
+          type: typeof att.type === 'string' ? att.type : 'application/octet-stream',
+          size: typeof att.size === 'number' ? att.size : null,
+          dataUrl: att.dataUrl,
+          uploadedAt: Date.now()
+        };
+        pushLog(data, execId, action.month, 'ejecutivo', `Adjuntó archivo "${att.name}"`);
+      } else if (action.type === 'removeFile') {
+        const rec = data.scores && data.scores[execId] && data.scores[execId][action.month] && data.scores[execId][action.month][action.kpiId];
+        if (rec) rec.attachment = null;
+        pushLog(data, execId, action.month, 'ejecutivo', 'Eliminó archivo adjunto');
       } else {
         res.status(400).json({ error: 'Acción no soportada' });
         return;

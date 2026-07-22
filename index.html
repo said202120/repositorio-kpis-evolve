@@ -375,7 +375,8 @@
             </div>
             <div>
               <sc-for list="{{cat.kpis}}" as="kpi" hint-placeholder-count="3">
-                <div style="padding:18px 22px;border-bottom:1px solid oklch(0.94 0.008 255);display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+                <div style="padding:18px 22px;border-bottom:1px solid oklch(0.94 0.008 255)">
+                <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
                   <div style="flex:1;min-width:240px">
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                       <sc-if value="{{kpi.editing}}" hint-placeholder-val="{{false}}">
@@ -416,6 +417,53 @@
                       </sc-if>
                     </sc-if>
                   </div>
+                </div>
+
+                <div style="margin-top:14px;padding-top:14px;border-top:1px dashed oklch(0.92 0.01 255);display:flex;gap:20px;flex-wrap:wrap">
+                  <sc-if value="{{isEjecutivoRole}}" hint-placeholder-val="{{false}}">
+                    <div style="flex:1;min-width:220px">
+                      <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);margin-bottom:6px;text-transform:uppercase;letter-spacing:.02em">Tu comentario</div>
+                      <textarea placeholder="Agrega un comentario sobre este KPI…" value="{{kpi.execComment}}" onChange="{{kpi.onExecCommentChange}}" style="width:100%;border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-family:Inter,sans-serif;font-size:12.5px;resize:vertical;min-height:44px"></textarea>
+                    </div>
+                    <div style="flex:1;min-width:220px">
+                      <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);margin-bottom:6px;text-transform:uppercase;letter-spacing:.02em">Archivo de soporte</div>
+                      <sc-if value="{{kpi.hasAttachment}}" hint-placeholder-val="{{false}}">
+                        <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px;margin-bottom:8px">
+                          <span>📎</span>
+                          <a href="{{kpi.attachment.dataUrl}}" download="{{kpi.attachment.name}}" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ kpi.attachment.name }}</a>
+                          <span style="color:oklch(0.6 0.02 255);flex:none">{{ kpi.attachment.sizeDisplay }}</span>
+                          <button onClick="{{kpi.onRemoveFile}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
+                        </div>
+                      </sc-if>
+                      <input type="file" accept=".xlsx,.xls,.pdf,.ppt,.pptx" onChange="{{kpi.onFileChange}}" style="font-size:12px;width:100%"/>
+                      <div style="font-size:10.5px;color:oklch(0.6 0.02 255);margin-top:5px">Excel, PDF o PowerPoint · máx. 2.5 MB</div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{isReviewerRole}}" hint-placeholder-val="{{false}}">
+                    <div style="flex:1;min-width:220px">
+                      <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);margin-bottom:6px;text-transform:uppercase;letter-spacing:.02em">Comentario del ejecutivo</div>
+                      <sc-if value="{{kpi.hasExecComment}}" hint-placeholder-val="{{false}}">
+                        <div style="font-size:12.5px;color:oklch(0.4 0.02 255);background:oklch(0.97 0.006 255);border-radius:9px;padding:9px 11px;line-height:1.5">“{{ kpi.execComment }}”</div>
+                      </sc-if>
+                      <sc-if value="{{kpi.noExecComment}}" hint-placeholder-val="{{true}}">
+                        <div style="font-size:12px;color:oklch(0.6 0.02 255)">Sin comentario del ejecutivo</div>
+                      </sc-if>
+                    </div>
+                    <div style="flex:1;min-width:220px">
+                      <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);margin-bottom:6px;text-transform:uppercase;letter-spacing:.02em">Archivo de soporte</div>
+                      <sc-if value="{{kpi.hasAttachment}}" hint-placeholder-val="{{false}}">
+                        <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px">
+                          <span>📎</span>
+                          <a href="{{kpi.attachment.dataUrl}}" download="{{kpi.attachment.name}}" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ kpi.attachment.name }}</a>
+                          <span style="color:oklch(0.6 0.02 255);flex:none">{{ kpi.attachment.sizeDisplay }}</span>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{kpi.noAttachment}}" hint-placeholder-val="{{true}}">
+                        <div style="font-size:12px;color:oklch(0.6 0.02 255)">Sin archivo adjunto</div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                </div>
                 </div>
               </sc-for>
               <sc-if value="{{cat.canAdd}}" hint-placeholder-val="{{false}}">
@@ -487,6 +535,23 @@ const STORAGE_KEY = 'evolve-kpi-repo-v1';
 const JITTER = [4,-3,2,-5,3,-2,5];
 
 function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+
+// Attachments carry base64 file data that can be several MB per KPI —
+// keep that out of localStorage (browser quota is tiny) and only mirror
+// the metadata locally. Supabase, via /api/state, stays the real copy.
+function forLocalCache(data){
+  const copy = JSON.parse(JSON.stringify(data));
+  Object.values(copy.scores || {}).forEach(execScores => {
+    Object.values(execScores || {}).forEach(monthScores => {
+      Object.values(monthScores || {}).forEach(rec => {
+        if (rec && rec.attachment && rec.attachment.dataUrl) {
+          rec.attachment = { ...rec.attachment, dataUrl: null };
+        }
+      });
+    });
+  });
+  return copy;
+}
 
 function buildKpiList(defs){
   return defs.map(d => ({ id: d.id, name: d.name, desc: d.desc, considerations: d.considerations, weight: d.weight }));
@@ -583,7 +648,7 @@ class Component extends DCLogic {
       .then(payload => {
         if (payload && payload.data) {
           this.setState({ data: payload.data });
-          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload.data)); } catch(e) {}
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(payload.data))); } catch(e) {}
         } else if (session.role === 'admin') {
           this.syncRemote(this.state.data);
         }
@@ -773,7 +838,7 @@ class Component extends DCLogic {
 
   saveData(data, action){
     this.setState({ data });
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(data))); } catch(e) {}
     this.syncRemote(data, action);
   }
 
@@ -843,6 +908,58 @@ class Component extends DCLogic {
     if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score:null, comment:'' };
     data.scores[execId][month][kpiId].comment = val;
     this.saveData(data);
+  }
+
+  setExecComment(execId, month, kpiId, val){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.scores[execId][month]) data.scores[execId][month] = {};
+    if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score:null, comment:'' };
+    data.scores[execId][month][kpiId].execComment = val;
+    this.saveData(data, { type:'setExecComment', execId, month, kpiId, execComment: val });
+  }
+
+  onKpiFileChange(execId, month, kpiId, e){
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!/\.(xlsx|xls|pdf|ppt|pptx)$/i.test(file.name)) {
+      alert('Solo se permiten archivos Excel, PDF o PowerPoint.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 2.5 * 1024 * 1024) {
+      alert('El archivo no debe superar 2.5 MB.');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.saveKpiFile(execId, month, kpiId, {
+        name: file.name, type: file.type || 'application/octet-stream', size: file.size, dataUrl: reader.result
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  saveKpiFile(execId, month, kpiId, attachment){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.scores[execId][month]) data.scores[execId][month] = {};
+    if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score:null, comment:'' };
+    const full = { ...attachment, uploadedAt: Date.now() };
+    data.scores[execId][month][kpiId].attachment = full;
+    const { kpi } = this.findKpi(data, execId, kpiId);
+    this.addLog(data, execId, month, `Adjuntó archivo "${attachment.name}" en "${kpi ? kpi.name : kpiId}"`);
+    this.saveData(data, { type:'uploadFile', execId, month, kpiId, attachment: full });
+  }
+
+  removeKpiFile(execId, month, kpiId){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (data.scores[execId][month] && data.scores[execId][month][kpiId]) {
+      data.scores[execId][month][kpiId].attachment = null;
+    }
+    const { kpi } = this.findKpi(data, execId, kpiId);
+    this.addLog(data, execId, month, `Eliminó archivo adjunto de "${kpi ? kpi.name : kpiId}"`);
+    this.saveData(data, { type:'removeFile', execId, month, kpiId });
   }
 
   setWeight(execId, catId, kpiId, val){
@@ -977,6 +1094,7 @@ class Component extends DCLogic {
     const showComments = this.props.showComments ?? true;
     const monthLabelOf = v => (MONTHS.find(m => m.value === v) || {}).label || v;
     const fmtMoney = n => '$' + Math.round(n).toLocaleString('es-MX');
+    const fmtBytes = n => (n === null || n === undefined) ? '' : n < 1024*1024 ? Math.round(n/1024) + ' KB' : (n/(1024*1024)).toFixed(1) + ' MB';
 
     const isAdminSession = !!(s.session && s.session.role === 'admin');
     const isExecSession = !!(s.session && s.session.role === 'ejecutivo');
@@ -1052,6 +1170,7 @@ class Component extends DCLogic {
           if (score !== null && score !== undefined) earned += k.weight * (score/100);
           const kstatus = this.statusFor(score);
           const editable = isManagerEditable;
+          const attachment = rec.attachment || null;
           return {
             id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight,
             editing: s.editingKpis && isManagerEditable,
@@ -1065,8 +1184,17 @@ class Component extends DCLogic {
             barPct: (score || 0) + '%',
             comment: rec.comment || '',
             showComment: showComments && !!rec.comment,
+            execComment: rec.execComment || '',
+            hasExecComment: !!rec.execComment,
+            noExecComment: !rec.execComment,
+            attachment: attachment ? { ...attachment, sizeDisplay: fmtBytes(attachment.size) } : null,
+            hasAttachment: !!attachment,
+            noAttachment: !attachment,
             onScoreChange: e => this.setScore(exec.id, s.selectedMonth, k.id, parseInt(e.target.value)),
             onCommentChange: e => this.setComment(exec.id, s.selectedMonth, k.id, e.target.value),
+            onExecCommentChange: e => this.setExecComment(exec.id, s.selectedMonth, k.id, e.target.value),
+            onFileChange: e => this.onKpiFileChange(exec.id, s.selectedMonth, k.id, e),
+            onRemoveFile: () => this.removeKpiFile(exec.id, s.selectedMonth, k.id),
             onWeightChange: e => this.setWeight(exec.id, cat.id, k.id, e.target.value),
             onNameChange: e => this.setKpiName(exec.id, cat.id, k.id, e.target.value),
             onDelete: () => this.deleteKpi(exec.id, cat.id, k.id)
@@ -1202,6 +1330,7 @@ class Component extends DCLogic {
       roleTabs,
       isEjecutivoRole: s.role === 'ejecutivo',
       isJefeRole: s.role === 'jefe',
+      isReviewerRole: s.role === 'manager' || s.role === 'jefe',
       showExecSwitcher: s.role === 'ejecutivo' && isAdminSession,
       showRoleTabs: isAdminSession,
       ejecutivoOptions: data.executives.map(e => ({ id:e.id, name:e.name })),
