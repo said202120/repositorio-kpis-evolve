@@ -578,7 +578,7 @@ function forLocalCache(data){
 }
 
 function buildKpiList(defs){
-  return defs.map(d => ({ id: d.id, name: d.name, desc: d.desc, considerations: d.considerations, weight: d.weight }));
+  return defs.map(d => ({ id: d.id, name: d.name, desc: d.desc, considerations: d.considerations, weight: d.weight, effectiveFrom: d.effectiveFrom || null }));
 }
 
 function seedScores(execId, bases, kpiIds){
@@ -764,8 +764,9 @@ class Component extends DCLogic {
           {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega primeros 5 días hábiles del mes.', considerations:'Enviar soporte del 1 al 5 del mes.', weight:15},
           {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'Enviar reporte de iniciativa corporativa para Bepensa o Evolve.', weight:10},
           {id:'g4', name:'Envío y carga de plan de trabajo mensual', desc:'Entrega primeros 5 días.', considerations:'Para obtener la cobertura real a fin de mes.', weight:10},
-          {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Análisis de cobertura semanal, riesgos por área y visibilidad por región.', weight:10},
-          {id:'g6', name:'Entrega de reporte de cierre mensual Evolve', desc:'Entrega primeros 8 días.', considerations:'"Sello Evo": rotación, apego al plan, ventas, exhibiciones e iniciativas.', weight:20}
+          {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Análisis de cobertura semanal, riesgos por área y visibilidad por región.', weight:5},
+          {id:'g6', name:'Entrega de reporte de cierre mensual Evolve', desc:'Entrega primeros 8 días.', considerations:'"Sello Evo": rotación, apego al plan, ventas, exhibiciones e iniciativas.', weight:15},
+          {id:'g7', name:'Salida a Campo Mensual', desc:'Realizar una salida a campo cada quincena (2 veces al mes) y generar un reporte con los hallazgos encontrados en punto de venta.', considerations:'Cargar la presentación de hallazgos como archivo de soporte de este KPI.', weight:10, effectiveFrom:'2026-07'}
         ])},
         { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
           {id:'c1', name:'Satisfacción del cliente', desc:'Calificación en revisiones periódicas / relación con coordinadores y supervisores.', considerations:'Sin molestias o comentarios negativos durante el mes.', weight:5},
@@ -904,6 +905,7 @@ class Component extends DCLogic {
     const monthScores = this.state.data.scores[exec.id][month] || {};
     let earned = 0, filled = 0, total = 0;
     exec.categories.forEach(cat => cat.kpis.forEach(k => {
+      if (k.effectiveFrom && k.effectiveFrom > month) return;
       total++;
       const s = monthScores[k.id];
       if (s && s.score !== null && s.score !== undefined) { earned += k.weight * (s.score/100); filled++; }
@@ -1207,7 +1209,8 @@ class Component extends DCLogic {
       const categories = exec.categories.map(cat => {
         const monthScores = data.scores[exec.id][s.selectedMonth] || {};
         let earned = 0;
-        const kpis = cat.kpis.map(k => {
+        const visibleKpis = cat.kpis.filter(k => !k.effectiveFrom || k.effectiveFrom <= s.selectedMonth);
+        const kpis = visibleKpis.map(k => {
           const rec = monthScores[k.id] || { score:null, comment:'' };
           const score = rec.score;
           if (score !== null && score !== undefined) earned += k.weight * (score/100);
@@ -1245,7 +1248,7 @@ class Component extends DCLogic {
         });
         return {
           id: cat.id, name: cat.name,
-          maxWeight: cat.kpis.reduce((a,k)=>a+k.weight,0),
+          maxWeight: visibleKpis.reduce((a,k)=>a+k.weight,0),
           earnedDisplay: Math.round(earned),
           kpis,
           canAdd: s.editingKpis && isManagerEditable,
