@@ -306,7 +306,7 @@
             <div style="font-family:Sora,sans-serif;font-weight:700;font-size:14.5px;margin-bottom:12px">Variable del mes</div>
             <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
               <div style="font-family:Sora,sans-serif;font-weight:800;font-size:26px;color:{{brand.accent}}">{{ detail.variable.earnedDisplay }}</div>
-              <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:600">de <sc-if value="{{detail.variable.editable}}" hint-placeholder-val="{{false}}"><input type="number" value="{{detail.variable.monthly}}" onChange="{{detail.variable.onMonthlyChange}}" style="width:80px;border:1px solid oklch(0.85 0.02 255);border-radius:6px;padding:3px 6px;font-family:Inter,sans-serif;font-size:12.5px"/></sc-if><sc-if value="{{detail.variable.readOnlyMonthly}}" hint-placeholder-val="{{true}}"><span>{{ detail.variable.monthlyDisplay }}</span></sc-if> bono mensual ({{ detail.variable.pctDisplay }})</div>
+              <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:600">de <sc-if value="{{detail.variable.editable}}" hint-placeholder-val="{{false}}"><input type="number" placeholder="Sin autorizar" value="{{detail.variable.monthly}}" onChange="{{detail.variable.onMonthlyChange}}" style="width:110px;border:1px solid oklch(0.85 0.02 255);border-radius:6px;padding:3px 6px;font-family:Inter,sans-serif;font-size:12.5px"/></sc-if><sc-if value="{{detail.variable.readOnlyMonthly}}" hint-placeholder-val="{{true}}"><span>{{ detail.variable.monthlyDisplay }}</span></sc-if> bono mensual ({{ detail.variable.pctDisplay }})</div>
             </div>
             <div style="font-size:12px;color:oklch(0.55 0.02 255);margin-top:8px">{{ detail.variable.accumDisplay }}</div>
             <sc-if value="{{detail.variable.editable}}" hint-placeholder-val="{{false}}">
@@ -816,9 +816,11 @@ class Component extends DCLogic {
       ]
     };
 
-    daniela.monthlyVariable = 8000;
-    edgar.monthlyVariable = 8000;
-    marifer.monthlyVariable = 7000;
+    const monthlyVariables = {
+      daniela: { '2026-06': 8000 },
+      edgar: { '2026-06': 8000 },
+      marifer: { '2026-06': 7000 }
+    };
 
     const execs = [daniela, edgar, marifer];
     const bases = {
@@ -854,13 +856,18 @@ class Component extends DCLogic {
       { ts: new Date('2026-06-29T10:25:00').getTime(), execId:'marifer', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' }
     ];
 
-    return { executives: execs, scores, midReviews, plans, acks, logs, variableAdjustments: {} };
+    return { executives: execs, scores, midReviews, plans, acks, logs, variableAdjustments: {}, monthlyVariables };
   }
 
   saveData(data, action){
     this.setState({ data });
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(data))); } catch(e) {}
     this.syncRemote(data, action);
+  }
+
+  monthlyVariableFor(execId, month){
+    const v = this.state.data.monthlyVariables && this.state.data.monthlyVariables[execId] ? this.state.data.monthlyVariables[execId][month] : undefined;
+    return (v === undefined || v === null) ? 0 : v;
   }
 
   clientLogo(client){
@@ -1030,11 +1037,18 @@ class Component extends DCLogic {
     this.saveData(data);
   }
 
-  setMonthlyVariable(execId, val){
+  setMonthlyVariable(execId, month, val){
     const data = JSON.parse(JSON.stringify(this.state.data));
-    const v = clamp(parseInt(val)||0, 0, 1000000);
-    data.executives.find(e => e.id === execId).monthlyVariable = v;
-    this.addLog(data, execId, this.state.selectedMonth, `Actualizó bono variable mensual a $${v.toLocaleString('es-MX')}`);
+    if (!data.monthlyVariables) data.monthlyVariables = {};
+    if (!data.monthlyVariables[execId]) data.monthlyVariables[execId] = {};
+    if (val === '' || val === null || val === undefined) {
+      delete data.monthlyVariables[execId][month];
+      this.addLog(data, execId, month, `Quitó el bono mensual autorizado de ${month}`);
+    } else {
+      const v = clamp(parseInt(val)||0, 0, 1000000);
+      data.monthlyVariables[execId][month] = v;
+      this.addLog(data, execId, month, `Autorizó bono mensual de $${v.toLocaleString('es-MX')} para ${month}`);
+    }
     this.saveData(data);
   }
 
@@ -1169,7 +1183,8 @@ class Component extends DCLogic {
       const sparkPoints = sparkVals.map((v,i) => `${(i*(280/(n-1||1)))+10},${60 - (v/100*50)}`).join(' ');
       const sparkDots = sparkVals.map((v,i) => ({ cx:(i*(280/(n-1||1)))+10, cy: 60 - (v/100*50) }));
       const alertNote = latest && latest.total.earned < (this.props.alertThreshold ?? 80) ? `${latest.month.label}: ${latest.total.earned} pts, por debajo del umbral` : null;
-      const variableDisplay = showTotal !== null ? `${fmtMoney(exec.monthlyVariable * (showTotal/100))} de ${fmtMoney(exec.monthlyVariable)}` : 'Pendiente';
+      const cardMonthly = this.monthlyVariableFor(exec.id, s.selectedMonth);
+      const variableDisplay = showTotal !== null ? `${fmtMoney(cardMonthly * (showTotal/100))} de ${fmtMoney(cardMonthly)}` : 'Pendiente';
       return {
         id: exec.id, name: exec.name, roleLabel: exec.roleLabel, client: exec.client,
         clientLogo: this.clientLogo(exec.client),
@@ -1252,24 +1267,28 @@ class Component extends DCLogic {
         };
       });
 
-      const autoVariableEarned = totalNow.isComplete ? exec.monthlyVariable * (totalNow.earned/100) : (totalNow.isEmpty ? null : exec.monthlyVariable * (totalNow.earned/100));
+      const monthlyRec = data.monthlyVariables && data.monthlyVariables[exec.id] ? data.monthlyVariables[exec.id][s.selectedMonth] : undefined;
+      const hasMonthly = monthlyRec !== undefined && monthlyRec !== null;
+      const monthlyAmount = hasMonthly ? monthlyRec : 0;
+      const autoVariableEarned = totalNow.isComplete ? monthlyAmount * (totalNow.earned/100) : (totalNow.isEmpty ? null : monthlyAmount * (totalNow.earned/100));
       const adjustmentRec = data.variableAdjustments && data.variableAdjustments[exec.id] ? data.variableAdjustments[exec.id][s.selectedMonth] : undefined;
       const hasAdjustment = adjustmentRec !== undefined && adjustmentRec !== null;
       const variableEarned = hasAdjustment ? adjustmentRec : autoVariableEarned;
       const completedMonths = MONTHS.filter(m => this.computeTotal(exec, m.value).isComplete);
       const accumTotal = completedMonths.reduce((sum,m) => {
-        const auto = exec.monthlyVariable * (this.computeTotal(exec, m.value).earned/100);
+        const auto = this.monthlyVariableFor(exec.id, m.value) * (this.computeTotal(exec, m.value).earned/100);
         const adj = data.variableAdjustments && data.variableAdjustments[exec.id] ? data.variableAdjustments[exec.id][m.value] : undefined;
         return sum + (adj !== undefined && adj !== null ? adj : auto);
       }, 0);
       const variable = {
-        monthly: exec.monthlyVariable,
+        monthly: hasMonthly ? monthlyAmount : '',
+        hasMonthly,
         earnedDisplay: variableEarned === null ? 'Pendiente' : fmtMoney(variableEarned),
         pctDisplay: totalNow.isComplete ? totalNow.earned + '%' : (totalNow.isEmpty ? '—' : Math.round(totalNow.earned) + '% parcial'),
         editable: isManagerEditable,
         readOnlyMonthly: !isManagerEditable,
-        monthlyDisplay: fmtMoney(exec.monthlyVariable),
-        onMonthlyChange: e => this.setMonthlyVariable(exec.id, e.target.value),
+        monthlyDisplay: hasMonthly ? fmtMoney(monthlyAmount) : 'Pendiente',
+        onMonthlyChange: e => this.setMonthlyVariable(exec.id, s.selectedMonth, e.target.value),
         hasAdjustment,
         autoDisplay: autoVariableEarned === null ? 'Pendiente' : fmtMoney(autoVariableEarned),
         adjustmentValue: hasAdjustment ? Math.round(adjustmentRec) : '',
