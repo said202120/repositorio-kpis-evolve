@@ -320,6 +320,9 @@
               </sc-if>
             </div>
             <div data-no-print style="display:flex;gap:8px">
+              <sc-if value="{{detail.canManualSave}}" hint-placeholder-val="{{false}}">
+                <button onClick="{{detail.onManualSave}}" disabled="{{detail.saveButtonDisabled}}" style="border:none;background:{{brand.accent}};color:white;font-size:12px;font-weight:700;padding:7px 14px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">{{ detail.saveButtonLabel }}</button>
+              </sc-if>
               <button onClick="{{detail.onExportCsv}}" style="border:1px solid oklch(0.85 0.02 255);background:white;color:oklch(0.4 0.02 255);font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Exportar Excel</button>
               <button onClick="{{detail.onExportPdf}}" style="border:1px solid oklch(0.85 0.02 255);background:white;color:oklch(0.4 0.02 255);font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Exportar PDF</button>
             </div>
@@ -571,6 +574,13 @@
       </div>
     </div>
   </sc-if>
+
+  <sc-if value="{{saveToastSaved}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;bottom:24px;right:24px;background:oklch(0.42 0.13 150);color:white;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,0.25);z-index:70;display:flex;align-items:center;gap:8px" data-no-print>✓ Guardado con éxito</div>
+  </sc-if>
+  <sc-if value="{{saveToastError}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;bottom:24px;right:24px;background:oklch(0.5 0.18 25);color:white;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,0.25);z-index:70;display:flex;align-items:center;gap:8px" data-no-print>⚠ No se pudo guardar. Revisa tu conexión e intenta de nuevo.</div>
+  </sc-if>
 </div>
 </sc-if>
 </x-dc>
@@ -642,7 +652,8 @@ class Component extends DCLogic {
     cpConfirm: '',
     cpError: '',
     cpSuccess: '',
-    cpSubmitting: false
+    cpSubmitting: false,
+    saveStatus: 'idle'
   };
 
   constructor(props){
@@ -771,13 +782,45 @@ class Component extends DCLogic {
 
   syncRemote(data, action){
     const isExec = this.state.session && this.state.session.role === 'ejecutivo';
-    if (isExec && !action) return;
-    fetch('/api/state', {
+    if (isExec && !action) return Promise.resolve();
+    this.setState({ saveStatus: 'saving' });
+    const p = fetch('/api/state', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(isExec ? { action } : { data })
-    }).catch(() => {});
+    }).then(r => {
+      if (!r.ok) throw new Error('save failed');
+      this.markSaved();
+    }).catch(() => {
+      this.setState({ saveStatus: 'error' });
+    });
+    this.__lastSavePromise = p;
+    return p;
+  }
+
+  markSaved(){
+    this.setState({ saveStatus: 'saved' });
+    // Token instead of clearTimeout/reset: several fields can each trigger
+    // their own save in quick succession (e.g. score + comment), and only
+    // the LAST one's timer should decide when the toast disappears — a
+    // stray earlier timer firing mid-sequence would hide it too soon.
+    this.__saveToken = (this.__saveToken || 0) + 1;
+    const token = this.__saveToken;
+    setTimeout(() => {
+      if (token === this.__saveToken && this.state.saveStatus === 'saved') {
+        this.setState({ saveStatus: 'idle' });
+      }
+    }, 4000);
+  }
+
+  manualSave(){
+    this.setState({ saveStatus: 'saving' });
+    const pending = this.__lastSavePromise || Promise.resolve();
+    const minDelay = new Promise(res => setTimeout(res, 450));
+    Promise.all([pending, minDelay]).then(() => {
+      if (this.state.saveStatus !== 'error') this.markSaved();
+    });
   }
 
   buildDefaultData(){
@@ -1437,6 +1480,12 @@ class Component extends DCLogic {
         noPhoto: !exec.photoUrl,
         canEditPhoto: isManagerEditable,
         onPhotoChange: e => this.onPhotoFileChange(exec.id, e),
+        canManualSave: isManagerEditable || s.role === 'ejecutivo',
+        saveButtonLabel: s.saveStatus === 'saving' ? 'Guardando…' : 'Guardar cambios',
+        saveButtonDisabled: s.saveStatus === 'saving',
+        saveStatusSaved: s.saveStatus === 'saved',
+        saveStatusError: s.saveStatus === 'error',
+        onManualSave: () => this.manualSave(),
         totalDisplay: totalNow.isComplete ? String(totalNow.earned) : (totalNow.isEmpty ? '—' : String(Math.round(totalNow.earned))),
         totalColor: status.color, statusLabel: status.label, statusBg: status.bg, statusColor: status.color,
         partialNote,
@@ -1511,7 +1560,10 @@ class Component extends DCLogic {
         onConfirmChange: e => this.setState({ cpConfirm: e.target.value }),
         onCancel: () => this.toggleChangePassword(),
         onSubmit: () => this.submitChangePassword()
-      }
+      },
+
+      saveToastSaved: s.saveStatus === 'saved',
+      saveToastError: s.saveStatus === 'error'
     };
   }
 }
