@@ -191,8 +191,13 @@
             <div onClick="{{card.openHandler}}" style="flex:1;min-width:300px;background:white;border-radius:20px;padding:26px;border:1px solid oklch(0.91 0.01 255);box-shadow:0 1px 3px rgba(20,30,50,0.05);cursor:pointer;display:flex;flex-direction:column;gap:16px" style-hover="box-shadow:0 8px 22px rgba(20,30,50,0.1);transform:translateY(-2px)">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
                 <div style="display:flex;align-items:center;gap:12px">
-                  <div style="width:72px;height:72px;border-radius:50%;flex:none;overflow:hidden">
-                    <x-import component-from-global-scope="image-slot" from="./image-slot.js" id="avatar-{{card.id}}" shape="circle" placeholder="foto" hint-size="72px,72px" style="width:72px;height:72px"></x-import>
+                  <div style="width:72px;height:72px;border-radius:50%;flex:none;overflow:hidden;background:oklch(0.94 0.01 255);display:flex;align-items:center;justify-content:center">
+                    <sc-if value="{{card.photoUrl}}" hint-placeholder-val="{{false}}">
+                      <img src="{{card.photoUrl}}" style="width:100%;height:100%;object-fit:cover;display:block"/>
+                    </sc-if>
+                    <sc-if value="{{card.noPhoto}}" hint-placeholder-val="{{true}}">
+                      <span style="font-size:26px;opacity:.45">👤</span>
+                    </sc-if>
                   </div>
                   <div>
                     <div style="font-family:Sora,sans-serif;font-weight:700;font-size:17px">{{ card.name }}</div>
@@ -283,8 +288,19 @@
               <div style="font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:99px;background:oklch(0.94 0.02 255);color:oklch(0.4 0.03 255);display:inline-block">{{ detail.client }}</div>
             </div>
             <div style="display:flex;align-items:center;gap:14px">
-              <div style="width:84px;height:84px;border-radius:50%;flex:none;overflow:hidden">
-                <image-slot id="avatar-detail-{{detail.execId}}" shape="circle" placeholder="foto" style="width:84px;height:84px"></image-slot>
+              <div style="position:relative;width:84px;height:84px;border-radius:50%;flex:none;overflow:hidden;background:oklch(0.94 0.01 255);display:flex;align-items:center;justify-content:center">
+                <sc-if value="{{detail.photoUrl}}" hint-placeholder-val="{{false}}">
+                  <img src="{{detail.photoUrl}}" style="width:100%;height:100%;object-fit:cover;display:block"/>
+                </sc-if>
+                <sc-if value="{{detail.noPhoto}}" hint-placeholder-val="{{true}}">
+                  <span style="font-size:30px;opacity:.45">👤</span>
+                </sc-if>
+                <sc-if value="{{detail.canEditPhoto}}" hint-placeholder-val="{{false}}">
+                  <label style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:white;font-size:10.5px;font-weight:700;text-align:center;opacity:0;cursor:pointer;transition:opacity .15s" style-hover="opacity:1">
+                    Cambiar foto
+                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange="{{detail.onPhotoChange}}" style="display:none"/>
+                  </label>
+                </sc-if>
               </div>
               <div>
                 <div style="font-family:Sora,sans-serif;font-weight:800;font-size:26px;letter-spacing:-0.01em">{{ detail.name }}</div>
@@ -883,6 +899,46 @@ class Component extends DCLogic {
     return (v === undefined || v === null) ? 0 : v;
   }
 
+  onPhotoFileChange(execId, e){
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      alert('Solo se permiten imágenes PNG, JPEG o WebP.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      alert('La imagen no debe superar 8 MB.');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 400;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        this.setExecPhoto(execId, canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  setExecPhoto(execId, dataUrl){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    const exec = data.executives.find(e => e.id === execId);
+    exec.photoUrl = dataUrl;
+    this.addLog(data, execId, this.state.selectedMonth, 'Actualizó la foto de perfil');
+    this.saveData(data);
+  }
+
   clientLogo(client){
     if (client === 'BEPENSA') return 'assets/bepensa-logo.jpeg';
     if (client === 'GIFAN') return 'assets/gifan-logo.jpeg';
@@ -1201,6 +1257,8 @@ class Component extends DCLogic {
       return {
         id: exec.id, name: exec.name, roleLabel: exec.roleLabel, client: exec.client,
         clientLogo: this.clientLogo(exec.client),
+        photoUrl: exec.photoUrl || null,
+        noPhoto: !exec.photoUrl,
         variableDisplay,
         totalDisplay: showTotal !== null ? String(showTotal) : '—',
         totalColor: status.color, statusLabel: status.label, statusBg: status.bg, statusColor: status.color,
@@ -1375,6 +1433,10 @@ class Component extends DCLogic {
       detail = {
         execId: exec.id,
         client: exec.client, clientLogo: this.clientLogo(exec.client), name: exec.name, roleLabel: exec.roleLabel,
+        photoUrl: exec.photoUrl || null,
+        noPhoto: !exec.photoUrl,
+        canEditPhoto: isManagerEditable,
+        onPhotoChange: e => this.onPhotoFileChange(exec.id, e),
         totalDisplay: totalNow.isComplete ? String(totalNow.earned) : (totalNow.isEmpty ? '—' : String(Math.round(totalNow.earned))),
         totalColor: status.color, statusLabel: status.label, statusBg: status.bg, statusColor: status.color,
         partialNote,
