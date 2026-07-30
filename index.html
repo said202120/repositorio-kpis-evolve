@@ -340,7 +340,6 @@
               <div style="font-family:Sora,sans-serif;font-weight:800;font-size:26px;color:{{brand.accent}}">{{ detail.variable.earnedDisplay }}</div>
               <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:600">de <sc-if value="{{detail.variable.editable}}" hint-placeholder-val="{{false}}"><input type="number" placeholder="Sin autorizar" value="{{detail.variable.monthly}}" onChange="{{detail.variable.onMonthlyChange}}" style="width:110px;border:1px solid oklch(0.85 0.02 255);border-radius:6px;padding:3px 6px;font-family:Inter,sans-serif;font-size:12.5px"/></sc-if><sc-if value="{{detail.variable.readOnlyMonthly}}" hint-placeholder-val="{{true}}"><span>{{ detail.variable.monthlyDisplay }}</span></sc-if> bono mensual ({{ detail.variable.pctDisplay }})</div>
             </div>
-            <div style="font-size:12px;color:oklch(0.55 0.02 255);margin-top:8px">{{ detail.variable.accumDisplay }}</div>
             <sc-if value="{{detail.variable.editable}}" hint-placeholder-val="{{false}}">
               <div style="margin-top:12px;padding-top:12px;border-top:1px solid oklch(0.93 0.01 255)">
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -1388,12 +1387,6 @@ class Component extends DCLogic {
       const adjustmentRec = data.variableAdjustments && data.variableAdjustments[exec.id] ? data.variableAdjustments[exec.id][s.selectedMonth] : undefined;
       const hasAdjustment = adjustmentRec !== undefined && adjustmentRec !== null;
       const variableEarned = hasAdjustment ? adjustmentRec : autoVariableEarned;
-      const completedMonths = MONTHS.filter(m => this.computeTotal(exec, m.value).isComplete);
-      const accumTotal = completedMonths.reduce((sum,m) => {
-        const auto = this.monthlyVariableFor(exec.id, m.value) * (this.computeTotal(exec, m.value).earned/100);
-        const adj = data.variableAdjustments && data.variableAdjustments[exec.id] ? data.variableAdjustments[exec.id][m.value] : undefined;
-        return sum + (adj !== undefined && adj !== null ? adj : auto);
-      }, 0);
       const variable = {
         monthly: hasMonthly ? monthlyAmount : '',
         hasMonthly,
@@ -1407,8 +1400,7 @@ class Component extends DCLogic {
         autoDisplay: autoVariableEarned === null ? 'Pendiente' : fmtMoney(autoVariableEarned),
         adjustmentValue: hasAdjustment ? Math.round(adjustmentRec) : '',
         onAdjustmentChange: e => this.setVariableAdjustment(exec.id, s.selectedMonth, e.target.value),
-        onClearAdjustment: () => this.setVariableAdjustment(exec.id, s.selectedMonth, null),
-        accumDisplay: `${fmtMoney(accumTotal)} acumulado en ${completedMonths.length} mes${completedMonths.length===1?'':'es'} (2026)`
+        onClearAdjustment: () => this.setVariableAdjustment(exec.id, s.selectedMonth, null)
       };
 
       const planItems = ((data.plans && data.plans[exec.id] && data.plans[exec.id][s.selectedMonth]) || []).map(item => ({
