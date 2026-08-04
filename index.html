@@ -490,8 +490,8 @@
                           <button onClick="{{kpi.onRemoveFile}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
                         </div>
                       </sc-if>
-                      <input type="file" accept=".xlsx,.xls,.pdf,.ppt,.pptx" onChange="{{kpi.onFileChange}}" style="font-size:12px;width:100%"/>
-                      <div style="font-size:10.5px;color:oklch(0.6 0.02 255);margin-top:5px">Excel, PDF o PowerPoint · máx. 2.5 MB</div>
+                      <input type="file" accept=".xlsx,.xls,.xlsb,.pdf,.ppt,.pptx" onChange="{{kpi.onFileChange}}" style="font-size:12px;width:100%"/>
+                      <div style="font-size:10.5px;color:oklch(0.6 0.02 255);margin-top:5px">Excel (.xlsx, .xls, .xlsb), PDF o PowerPoint · máx. 3 MB</div>
                     </div>
                   </sc-if>
                   <sc-if value="{{isReviewerRole}}" hint-placeholder-val="{{false}}">
@@ -1080,13 +1080,13 @@ class Component extends DCLogic {
   onKpiFileChange(execId, month, kpiId, e){
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (!/\.(xlsx|xls|pdf|ppt|pptx)$/i.test(file.name)) {
-      alert('Solo se permiten archivos Excel, PDF o PowerPoint.');
+    if (!/\.(xlsx|xls|xlsb|pdf|ppt|pptx)$/i.test(file.name)) {
+      alert('Solo se permiten archivos Excel (.xlsx, .xls, .xlsb), PDF o PowerPoint.');
       e.target.value = '';
       return;
     }
-    if (file.size > 2.5 * 1024 * 1024) {
-      alert('El archivo no debe superar 2.5 MB.');
+    if (file.size > 3 * 1024 * 1024) {
+      alert('El archivo no debe superar 3 MB.');
       e.target.value = '';
       return;
     }

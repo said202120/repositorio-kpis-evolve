@@ -49,9 +49,11 @@ function ensureScoreRec(data, execId, month, kpiId) {
 
 // Attachments ride inside the shared JSON blob (no separate object storage
 // configured), so cap them well under Vercel's ~4.5MB serverless request
-// body limit once base64 overhead (~37%) is accounted for.
-const MAX_ATTACHMENT_DATA_URL_LENGTH = 3.5 * 1024 * 1024;
-const ALLOWED_ATTACHMENT_EXT = /\.(xlsx|xls|pdf|ppt|pptx)$/i;
+// body limit once base64 overhead (~33%) is accounted for. A 3MB raw file
+// base64-encodes to exactly 4MB; 4.2MB leaves headroom for the data-URI
+// prefix and JSON wrapper while staying clear of the 4.5MB hard limit.
+const MAX_ATTACHMENT_DATA_URL_LENGTH = 4.2 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_EXT = /\.(xlsx|xls|xlsb|pdf|ppt|pptx)$/i;
 
 module.exports = async (req, res) => {
   const session = getSession(req);
@@ -132,7 +134,7 @@ module.exports = async (req, res) => {
           return;
         }
         if (att.dataUrl.length > MAX_ATTACHMENT_DATA_URL_LENGTH) {
-          res.status(413).json({ error: 'El archivo no debe superar 2.5 MB' });
+          res.status(413).json({ error: 'El archivo no debe superar 3 MB' });
           return;
         }
         const rec = ensureScoreRec(data, execId, action.month, action.kpiId);
