@@ -3,6 +3,13 @@ const { getSession } = require('./_auth');
 
 const ROW_ID = 'default';
 
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function fetchRow(db) {
   const { rows } = await db.query('select data from kpi_repo_state where id = $1', [ROW_ID]);
   return rows[0] ? rows[0].data : null;
@@ -56,6 +63,73 @@ function migrateAttachments(rec) {
   return rec.attachments;
 }
 
+function applyExecAction(data, execId, action) {
+  if (action.type === 'toggleplan') {
+    const item = data.plans && data.plans[execId] && data.plans[execId][action.month] &&
+      data.plans[execId][action.month].find(i => i.id === action.itemId);
+    if (!item) throw new HttpError(404, 'Acción no encontrada');
+    item.done = !item.done;
+    pushLog(data, execId, action.month, 'ejecutivo', `Marcó acción "${item.text}" como ${item.done ? 'completada' : 'pendiente'}`);
+    return;
+  }
+
+  if (action.type === 'sign') {
+    if (!data.acks) data.acks = {};
+    if (!data.acks[execId]) data.acks[execId] = {};
+    data.acks[execId][action.month] = { ackedAt: Date.now() };
+    pushLog(data, execId, action.month, 'ejecutivo', 'Firmó acuse de recibido de su retroalimentación');
+    return;
+  }
+
+  if (action.type === 'setExecComment') {
+    const rec = ensureScoreRec(data, execId, action.month, action.kpiId);
+    rec.execComment = typeof action.execComment === 'string' ? action.execComment.slice(0, 4000) : '';
+    pushLog(data, execId, action.month, 'ejecutivo', 'Comentó en un KPI');
+    return;
+  }
+
+  if (action.type === 'uploadFile') {
+    const att = action.attachment;
+    if (!att || typeof att.name !== 'string' || typeof att.dataUrl !== 'string') {
+      throw new HttpError(400, 'Archivo inválido');
+    }
+    if (!ALLOWED_ATTACHMENT_EXT.test(att.name)) {
+      throw new HttpError(400, 'Solo se permiten archivos Excel, PDF o PowerPoint');
+    }
+    if (att.dataUrl.length > MAX_ATTACHMENT_DATA_URL_LENGTH) {
+      throw new HttpError(413, 'El archivo no debe superar 3 MB');
+    }
+    const rec = ensureScoreRec(data, execId, action.month, action.kpiId);
+    const attachments = migrateAttachments(rec);
+    if (attachments.length >= MAX_ATTACHMENTS_PER_KPI) {
+      throw new HttpError(400, `Ya se alcanzó el máximo de ${MAX_ATTACHMENTS_PER_KPI} archivos para este KPI`);
+    }
+    attachments.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: att.name,
+      type: typeof att.type === 'string' ? att.type : 'application/octet-stream',
+      size: typeof att.size === 'number' ? att.size : null,
+      dataUrl: att.dataUrl,
+      uploadedAt: Date.now()
+    });
+    pushLog(data, execId, action.month, 'ejecutivo', `Adjuntó archivo "${att.name}" (${attachments.length}/${MAX_ATTACHMENTS_PER_KPI})`);
+    return;
+  }
+
+  if (action.type === 'removeFile') {
+    const rec = data.scores && data.scores[execId] && data.scores[execId][action.month] && data.scores[execId][action.month][action.kpiId];
+    if (rec) {
+      const attachments = migrateAttachments(rec);
+      const idx = attachments.findIndex(a => a.id === action.attachmentId);
+      if (idx !== -1) attachments.splice(idx, 1);
+    }
+    pushLog(data, execId, action.month, 'ejecutivo', 'Eliminó archivo adjunto');
+    return;
+  }
+
+  throw new HttpError(400, 'Acción no soportada');
+}
+
 // Attachments ride inside the shared JSON blob (no separate object storage
 // configured), so cap them well under Vercel's ~4.5MB serverless request
 // body limit once base64 overhead (~33%) is accounted for. A 3MB raw file
@@ -101,82 +175,50 @@ module.exports = async (req, res) => {
       }
 
       // "ejecutivo" sessions can never replace the whole blob — only a
-      // narrow, server-validated action against their own record.
+      // narrow, server-validated action against their own record. The UI
+      // can fire more than one save for what looks like a single change,
+      // so a plain fetch-then-write here would let a later request's read
+      // (of the still-stale row) clobber an earlier request's write —
+      // e.g. two file uploads racing and only the last one surviving.
+      // SELECT ... FOR UPDATE inside a transaction serializes that: the
+      // second request blocks until the first commits, then reads the
+      // already-updated row instead of the stale one.
       const action = body && body.action;
       if (!action || action.execId !== session.execId) {
         res.status(403).json({ error: 'No autorizado' });
         return;
       }
 
-      const data = await fetchRow(db);
-      if (!data) {
-        res.status(404).json({ error: 'Sin datos' });
-        return;
-      }
       const execId = session.execId;
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows } = await client.query('select data from kpi_repo_state where id = $1 for update', [ROW_ID]);
+        const data = rows[0] ? rows[0].data : null;
+        if (!data) {
+          throw new HttpError(404, 'Sin datos');
+        }
 
-      if (action.type === 'toggleplan') {
-        const item = data.plans && data.plans[execId] && data.plans[execId][action.month] &&
-          data.plans[execId][action.month].find(i => i.id === action.itemId);
-        if (!item) {
-          res.status(404).json({ error: 'Acción no encontrada' });
-          return;
+        applyExecAction(data, execId, action);
+
+        await client.query(
+          `insert into kpi_repo_state (id, data, updated_at)
+           values ($1, $2, now())
+           on conflict (id) do update set data = excluded.data, updated_at = now()`,
+          [ROW_ID, data]
+        );
+        await client.query('COMMIT');
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        if (err instanceof HttpError) {
+          res.status(err.status).json({ error: err.message });
+        } else {
+          throw err;
         }
-        item.done = !item.done;
-        pushLog(data, execId, action.month, 'ejecutivo', `Marcó acción "${item.text}" como ${item.done ? 'completada' : 'pendiente'}`);
-      } else if (action.type === 'sign') {
-        if (!data.acks) data.acks = {};
-        if (!data.acks[execId]) data.acks[execId] = {};
-        data.acks[execId][action.month] = { ackedAt: Date.now() };
-        pushLog(data, execId, action.month, 'ejecutivo', 'Firmó acuse de recibido de su retroalimentación');
-      } else if (action.type === 'setExecComment') {
-        const rec = ensureScoreRec(data, execId, action.month, action.kpiId);
-        rec.execComment = typeof action.execComment === 'string' ? action.execComment.slice(0, 4000) : '';
-        pushLog(data, execId, action.month, 'ejecutivo', 'Comentó en un KPI');
-      } else if (action.type === 'uploadFile') {
-        const att = action.attachment;
-        if (!att || typeof att.name !== 'string' || typeof att.dataUrl !== 'string') {
-          res.status(400).json({ error: 'Archivo inválido' });
-          return;
-        }
-        if (!ALLOWED_ATTACHMENT_EXT.test(att.name)) {
-          res.status(400).json({ error: 'Solo se permiten archivos Excel, PDF o PowerPoint' });
-          return;
-        }
-        if (att.dataUrl.length > MAX_ATTACHMENT_DATA_URL_LENGTH) {
-          res.status(413).json({ error: 'El archivo no debe superar 3 MB' });
-          return;
-        }
-        const rec = ensureScoreRec(data, execId, action.month, action.kpiId);
-        const attachments = migrateAttachments(rec);
-        if (attachments.length >= MAX_ATTACHMENTS_PER_KPI) {
-          res.status(400).json({ error: `Ya se alcanzó el máximo de ${MAX_ATTACHMENTS_PER_KPI} archivos para este KPI` });
-          return;
-        }
-        attachments.push({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          name: att.name,
-          type: typeof att.type === 'string' ? att.type : 'application/octet-stream',
-          size: typeof att.size === 'number' ? att.size : null,
-          dataUrl: att.dataUrl,
-          uploadedAt: Date.now()
-        });
-        pushLog(data, execId, action.month, 'ejecutivo', `Adjuntó archivo "${att.name}" (${attachments.length}/${MAX_ATTACHMENTS_PER_KPI})`);
-      } else if (action.type === 'removeFile') {
-        const rec = data.scores && data.scores[execId] && data.scores[execId][action.month] && data.scores[execId][action.month][action.kpiId];
-        if (rec) {
-          const attachments = migrateAttachments(rec);
-          const idx = attachments.findIndex(a => a.id === action.attachmentId);
-          if (idx !== -1) attachments.splice(idx, 1);
-        }
-        pushLog(data, execId, action.month, 'ejecutivo', 'Eliminó archivo adjunto');
-      } else {
-        res.status(400).json({ error: 'Acción no soportada' });
-        return;
+      } finally {
+        client.release();
       }
-
-      await saveRow(db, data);
-      res.status(200).json({ ok: true });
       return;
     }
 
