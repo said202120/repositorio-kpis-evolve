@@ -481,17 +481,31 @@
                       <textarea placeholder="Agrega un comentario sobre este KPI…" value="{{kpi.execComment}}" onChange="{{kpi.onExecCommentChange}}" style="width:100%;border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-family:Inter,sans-serif;font-size:12.5px;resize:vertical;min-height:44px"></textarea>
                     </div>
                     <div style="flex:1;min-width:220px">
-                      <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);margin-bottom:6px;text-transform:uppercase;letter-spacing:.02em">Archivo de soporte</div>
-                      <sc-if value="{{kpi.hasAttachment}}" hint-placeholder-val="{{false}}">
-                        <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px;margin-bottom:8px">
-                          <span>📎</span>
-                          <a href="{{kpi.attachment.dataUrl}}" download="{{kpi.attachment.name}}" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ kpi.attachment.name }}</a>
-                          <span style="color:oklch(0.6 0.02 255);flex:none">{{ kpi.attachment.sizeDisplay }}</span>
-                          <button onClick="{{kpi.onRemoveFile}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                        <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.02em">Archivos de soporte</div>
+                        <sc-if value="{{kpi.hasAttachments}}" hint-placeholder-val="{{false}}">
+                          <div style="font-size:11px;font-weight:700;color:{{brand.accent}}">{{ kpi.attachmentCountLabel }}</div>
+                        </sc-if>
+                      </div>
+                      <sc-if value="{{kpi.hasAttachments}}" hint-placeholder-val="{{false}}">
+                        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+                          <sc-for list="{{kpi.attachments}}" as="file" hint-placeholder-count="2">
+                            <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px">
+                              <span>📎</span>
+                              <a href="{{file.dataUrl}}" download="{{file.name}}" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                              <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
+                              <button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
+                            </div>
+                          </sc-for>
                         </div>
                       </sc-if>
-                      <input type="file" accept=".xlsx,.xls,.xlsb,.pdf,.ppt,.pptx" onChange="{{kpi.onFileChange}}" style="font-size:12px;width:100%"/>
-                      <div style="font-size:10.5px;color:oklch(0.6 0.02 255);margin-top:5px">Excel (.xlsx, .xls, .xlsb), PDF o PowerPoint · máx. 3 MB</div>
+                      <sc-if value="{{kpi.canAddMoreFiles}}" hint-placeholder-val="{{true}}">
+                        <input type="file" accept=".xlsx,.xls,.xlsb,.pdf,.ppt,.pptx" onChange="{{kpi.onFileChange}}" style="font-size:12px;width:100%"/>
+                        <div style="font-size:10.5px;color:oklch(0.6 0.02 255);margin-top:5px">Excel (.xlsx, .xls, .xlsb), PDF o PowerPoint · máx. 3 MB c/u · hasta 5 archivos</div>
+                      </sc-if>
+                      <sc-if value="{{kpi.maxAttachmentsReached}}" hint-placeholder-val="{{false}}">
+                        <div style="font-size:11px;color:oklch(0.55 0.02 255)">Ya subiste el máximo de 5 archivos para este KPI.</div>
+                      </sc-if>
                     </div>
                   </sc-if>
                   <sc-if value="{{isReviewerRole}}" hint-placeholder-val="{{false}}">
@@ -505,16 +519,25 @@
                       </sc-if>
                     </div>
                     <div style="flex:1;min-width:220px">
-                      <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);margin-bottom:6px;text-transform:uppercase;letter-spacing:.02em">Archivo de soporte</div>
-                      <sc-if value="{{kpi.hasAttachment}}" hint-placeholder-val="{{false}}">
-                        <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px">
-                          <span>📎</span>
-                          <a href="{{kpi.attachment.dataUrl}}" download="{{kpi.attachment.name}}" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ kpi.attachment.name }}</a>
-                          <span style="color:oklch(0.6 0.02 255);flex:none">{{ kpi.attachment.sizeDisplay }}</span>
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                        <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.02em">Archivos de soporte</div>
+                        <sc-if value="{{kpi.hasAttachments}}" hint-placeholder-val="{{false}}">
+                          <div style="font-size:11px;font-weight:700;color:{{brand.accent}}">{{ kpi.attachmentCountLabel }}</div>
+                        </sc-if>
+                      </div>
+                      <sc-if value="{{kpi.hasAttachments}}" hint-placeholder-val="{{false}}">
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                          <sc-for list="{{kpi.attachments}}" as="file" hint-placeholder-count="2">
+                            <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px">
+                              <span>📎</span>
+                              <a href="{{file.dataUrl}}" download="{{file.name}}" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                              <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
+                            </div>
+                          </sc-for>
                         </div>
                       </sc-if>
-                      <sc-if value="{{kpi.noAttachment}}" hint-placeholder-val="{{true}}">
-                        <div style="font-size:12px;color:oklch(0.6 0.02 255)">Sin archivo adjunto</div>
+                      <sc-if value="{{kpi.noAttachments}}" hint-placeholder-val="{{true}}">
+                        <div style="font-size:12px;color:oklch(0.6 0.02 255)">Sin archivos adjuntos</div>
                       </sc-if>
                     </div>
                   </sc-if>
@@ -602,6 +625,9 @@ function forLocalCache(data){
   Object.values(copy.scores || {}).forEach(execScores => {
     Object.values(execScores || {}).forEach(monthScores => {
       Object.values(monthScores || {}).forEach(rec => {
+        if (rec && Array.isArray(rec.attachments)) {
+          rec.attachments = rec.attachments.map(a => a && a.dataUrl ? { ...a, dataUrl: null } : a);
+        }
         if (rec && rec.attachment && rec.attachment.dataUrl) {
           rec.attachment = { ...rec.attachment, dataUrl: null };
         }
@@ -1077,9 +1103,24 @@ class Component extends DCLogic {
     this.saveData(data, { type:'setExecComment', execId, month, kpiId, execComment: val });
   }
 
+  // Normalizes a score record to the {attachments:[...]} shape, migrating
+  // any pre-multi-file record that still has the old singular `attachment`.
+  attachmentsFor(rec){
+    if (!rec.attachments) rec.attachments = rec.attachment ? [rec.attachment] : [];
+    delete rec.attachment;
+    return rec.attachments;
+  }
+
   onKpiFileChange(execId, month, kpiId, e){
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    const rec = (this.state.data.scores[execId][month] || {})[kpiId];
+    const existingCount = rec ? (rec.attachments || (rec.attachment ? [rec.attachment] : [])).length : 0;
+    if (existingCount >= 5) {
+      alert('Ya subiste el máximo de 5 archivos para este KPI.');
+      e.target.value = '';
+      return;
+    }
     if (!/\.(xlsx|xls|xlsb|pdf|ppt|pptx)$/i.test(file.name)) {
       alert('Solo se permiten archivos Excel (.xlsx, .xls, .xlsb), PDF o PowerPoint.');
       e.target.value = '';
@@ -1104,21 +1145,26 @@ class Component extends DCLogic {
     const data = JSON.parse(JSON.stringify(this.state.data));
     if (!data.scores[execId][month]) data.scores[execId][month] = {};
     if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score:null, comment:'' };
-    const full = { ...attachment, uploadedAt: Date.now() };
-    data.scores[execId][month][kpiId].attachment = full;
+    const rec = data.scores[execId][month][kpiId];
+    const attachments = this.attachmentsFor(rec);
+    const full = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ...attachment, uploadedAt: Date.now() };
+    attachments.push(full);
     const { kpi } = this.findKpi(data, execId, kpiId);
-    this.addLog(data, execId, month, `Adjuntó archivo "${attachment.name}" en "${kpi ? kpi.name : kpiId}"`);
+    this.addLog(data, execId, month, `Adjuntó archivo "${attachment.name}" (${attachments.length}/5) en "${kpi ? kpi.name : kpiId}"`);
     this.saveData(data, { type:'uploadFile', execId, month, kpiId, attachment: full });
   }
 
-  removeKpiFile(execId, month, kpiId){
+  removeKpiFile(execId, month, kpiId, attachmentId){
     const data = JSON.parse(JSON.stringify(this.state.data));
-    if (data.scores[execId][month] && data.scores[execId][month][kpiId]) {
-      data.scores[execId][month][kpiId].attachment = null;
+    const rec = data.scores[execId][month] && data.scores[execId][month][kpiId];
+    if (rec) {
+      const attachments = this.attachmentsFor(rec);
+      const idx = attachments.findIndex(a => a.id === attachmentId);
+      if (idx !== -1) attachments.splice(idx, 1);
     }
     const { kpi } = this.findKpi(data, execId, kpiId);
     this.addLog(data, execId, month, `Eliminó archivo adjunto de "${kpi ? kpi.name : kpiId}"`);
-    this.saveData(data, { type:'removeFile', execId, month, kpiId });
+    this.saveData(data, { type:'removeFile', execId, month, kpiId, attachmentId });
   }
 
   setWeight(execId, catId, kpiId, val){
@@ -1340,7 +1386,11 @@ class Component extends DCLogic {
           if (score !== null && score !== undefined) earned += k.weight * (score/100);
           const kstatus = this.statusFor(score);
           const editable = isManagerEditable;
-          const attachment = rec.attachment || null;
+          const attachmentsList = (rec.attachments || (rec.attachment ? [rec.attachment] : [])).map(a => ({
+            ...a,
+            sizeDisplay: fmtBytes(a.size),
+            onRemove: () => this.removeKpiFile(exec.id, s.selectedMonth, k.id, a.id)
+          }));
           return {
             id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight, icon: this.kpiIcon(k.name),
             editing: s.editingKpis && isManagerEditable,
@@ -1357,14 +1407,16 @@ class Component extends DCLogic {
             execComment: rec.execComment || '',
             hasExecComment: !!rec.execComment,
             noExecComment: !rec.execComment,
-            attachment: attachment ? { ...attachment, sizeDisplay: fmtBytes(attachment.size) } : null,
-            hasAttachment: !!attachment,
-            noAttachment: !attachment,
+            attachments: attachmentsList,
+            hasAttachments: attachmentsList.length > 0,
+            noAttachments: attachmentsList.length === 0,
+            attachmentCountLabel: `${attachmentsList.length}/5 archivos`,
+            canAddMoreFiles: attachmentsList.length < 5,
+            maxAttachmentsReached: attachmentsList.length >= 5,
             onScoreChange: e => this.setScore(exec.id, s.selectedMonth, k.id, parseInt(e.target.value)),
             onCommentChange: e => this.setComment(exec.id, s.selectedMonth, k.id, e.target.value),
             onExecCommentChange: e => this.setExecComment(exec.id, s.selectedMonth, k.id, e.target.value),
             onFileChange: e => this.onKpiFileChange(exec.id, s.selectedMonth, k.id, e),
-            onRemoveFile: () => this.removeKpiFile(exec.id, s.selectedMonth, k.id),
             onWeightChange: e => this.setWeight(exec.id, cat.id, k.id, e.target.value),
             onNameChange: e => this.setKpiName(exec.id, cat.id, k.id, e.target.value),
             onDelete: () => this.deleteKpi(exec.id, cat.id, k.id)

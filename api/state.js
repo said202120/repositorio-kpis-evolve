@@ -47,6 +47,15 @@ function ensureScoreRec(data, execId, month, kpiId) {
   return data.scores[execId][month][kpiId];
 }
 
+// Normalizes a score record to the {attachments:[...]} shape, migrating
+// any pre-multi-file record that still has the old singular `attachment`.
+function migrateAttachments(rec) {
+  if (!rec.attachments) rec.attachments = rec.attachment ? [rec.attachment] : [];
+  delete rec.attachment;
+  rec.attachments.forEach(a => { if (a && !a.id) a.id = `legacy-${a.uploadedAt || Date.now()}`; });
+  return rec.attachments;
+}
+
 // Attachments ride inside the shared JSON blob (no separate object storage
 // configured), so cap them well under Vercel's ~4.5MB serverless request
 // body limit once base64 overhead (~33%) is accounted for. A 3MB raw file
@@ -54,6 +63,7 @@ function ensureScoreRec(data, execId, month, kpiId) {
 // prefix and JSON wrapper while staying clear of the 4.5MB hard limit.
 const MAX_ATTACHMENT_DATA_URL_LENGTH = 4.2 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_EXT = /\.(xlsx|xls|xlsb|pdf|ppt|pptx)$/i;
+const MAX_ATTACHMENTS_PER_KPI = 5;
 
 module.exports = async (req, res) => {
   const session = getSession(req);
@@ -138,17 +148,27 @@ module.exports = async (req, res) => {
           return;
         }
         const rec = ensureScoreRec(data, execId, action.month, action.kpiId);
-        rec.attachment = {
+        const attachments = migrateAttachments(rec);
+        if (attachments.length >= MAX_ATTACHMENTS_PER_KPI) {
+          res.status(400).json({ error: `Ya se alcanzó el máximo de ${MAX_ATTACHMENTS_PER_KPI} archivos para este KPI` });
+          return;
+        }
+        attachments.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name: att.name,
           type: typeof att.type === 'string' ? att.type : 'application/octet-stream',
           size: typeof att.size === 'number' ? att.size : null,
           dataUrl: att.dataUrl,
           uploadedAt: Date.now()
-        };
-        pushLog(data, execId, action.month, 'ejecutivo', `Adjuntó archivo "${att.name}"`);
+        });
+        pushLog(data, execId, action.month, 'ejecutivo', `Adjuntó archivo "${att.name}" (${attachments.length}/${MAX_ATTACHMENTS_PER_KPI})`);
       } else if (action.type === 'removeFile') {
         const rec = data.scores && data.scores[execId] && data.scores[execId][action.month] && data.scores[execId][action.month][action.kpiId];
-        if (rec) rec.attachment = null;
+        if (rec) {
+          const attachments = migrateAttachments(rec);
+          const idx = attachments.findIndex(a => a.id === action.attachmentId);
+          if (idx !== -1) attachments.splice(idx, 1);
+        }
         pushLog(data, execId, action.month, 'ejecutivo', 'Eliminó archivo adjunto');
       } else {
         res.status(400).json({ error: 'Acción no soportada' });
