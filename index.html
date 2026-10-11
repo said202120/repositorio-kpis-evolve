@@ -97,7 +97,7 @@
         </div>
         <div style="position:relative;z-index:1">
           <div style="font-family:Sora,sans-serif;font-weight:800;font-size:26px;color:white;line-height:1.15;letter-spacing:-0.01em">Repositorio<br/>de KPIs</div>
-          <div style="font-size:13px;color:oklch(0.95 0.02 254 / 0.85);margin-top:10px;max-width:280px;line-height:1.5">Seguimiento y calificación mensual del desempeño de tus ejecutivos de cuenta · Bepensa &amp; Gifan</div>
+          <div style="font-size:13px;color:oklch(0.95 0.02 254 / 0.85);margin-top:10px;max-width:280px;line-height:1.5">Seguimiento y calificación mensual del desempeño de tus ejecutivos de cuenta · Spin Master &amp; Gifan</div>
         </div>
       </div>
       <div class="login-panel-form">
@@ -133,7 +133,7 @@
         <div style="width:1px;height:28px;background:oklch(0.88 0.01 255)"></div>
         <div>
           <div style="font-family:Sora,sans-serif;font-weight:800;font-size:19px;letter-spacing:-0.01em;line-height:1.1">Repositorio de KPIs</div>
-          <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:500">Evolve · Cuentas Bepensa &amp; Gifan</div>
+          <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:500">Evolve · Cuentas Spin Master &amp; Gifan</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -236,11 +236,8 @@
         <div style="margin-top:32px;background:white;border-radius:20px;padding:26px;border:1px solid oklch(0.91 0.01 255)" data-no-print>
           <div style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;margin-bottom:18px">Organigrama de Operaciones</div>
           <div style="display:flex;gap:20px;flex-wrap:wrap">
-            <a href="assets/organigrama-gifan.jpg" target="_blank" style="flex:1;min-width:280px;display:block;text-decoration:none">
+            <a href="assets/organigrama-gifan.jpg" target="_blank" style="flex:1;min-width:280px;max-width:640px;display:block;text-decoration:none">
               <img src="assets/organigrama-gifan.jpg" alt="Organigrama Evolve-Gifan" style="width:100%;border-radius:14px;display:block;border:1px solid oklch(0.91 0.01 255)"/>
-            </a>
-            <a href="assets/organigrama-bepensa.jpg" target="_blank" style="flex:1;min-width:280px;display:block;text-decoration:none">
-              <img src="assets/organigrama-bepensa.jpg" alt="Organigrama Evolve-Bepensa Spirits" style="width:100%;border-radius:14px;display:block;border:1px solid oklch(0.91 0.01 255)"/>
             </a>
           </div>
           <div style="font-size:11.5px;color:oklch(0.55 0.02 255);margin-top:10px">Haz clic en una imagen para verla en tamaño completo.</div>
@@ -637,6 +634,74 @@ function forLocalCache(data){
   return copy;
 }
 
+// BEGIN MIGRATION (pure, idempotent; tested in isolation)
+// Spin Master replaces Bepensa and Verónica Ochoa Manzo replaces Daniel Mena.
+// The real data lives in the Postgres blob, not in the code, so changing
+// buildDefaultData() alone does nothing for what people already see: this
+// runs when an admin session loads the blob and returns true if it changed
+// anything (the caller then saves it).
+const SPIN_MASTER_ROLE_LABEL = 'Ejecutivo de Cuenta · Spin Master';
+const VERONICA_PHOTO = 'assets/veronica-ochoa-manzo.jpg';
+
+function swapBepensaText(text){
+  if (typeof text !== 'string') return text;
+  return text.replace(/bepensa/gi, m => (m === m.toUpperCase() ? 'SPIN MASTER' : 'Spin Master'));
+}
+
+function swapBepensaInKpis(exec){
+  let changed = false;
+  (exec.categories || []).forEach(cat => (cat.kpis || []).forEach(k => {
+    ['desc', 'considerations'].forEach(field => {
+      const next = swapBepensaText(k[field]);
+      if (next !== k[field]) { k[field] = next; changed = true; }
+    });
+  }));
+  return changed;
+}
+
+function migrateToSpinMasterData(data){
+  if (!data || !Array.isArray(data.executives)) return false;
+  let changed = false;
+
+  // Daniel (id 'daniela') leaves; Verónica inherits his KPI structure but
+  // none of his scores, and his record stays as archived history.
+  const dIdx = data.executives.findIndex(e => e && e.id === 'daniela');
+  const hasVeronica = data.executives.some(e => e && e.id === 'veronica');
+  if (dIdx !== -1 && !hasVeronica) {
+    const daniela = data.executives[dIdx];
+    const veronica = JSON.parse(JSON.stringify(daniela));
+    delete veronica.archived;
+    Object.assign(veronica, {
+      id: 'veronica',
+      name: 'Verónica Ochoa Manzo',
+      roleLabel: SPIN_MASTER_ROLE_LABEL,
+      client: 'SPIN MASTER',
+      photoUrl: VERONICA_PHOTO
+    });
+    swapBepensaInKpis(veronica);
+    data.executives.splice(dIdx, 1, veronica);
+    daniela.archived = true;
+    data.executives.push(daniela);
+    ['scores', 'midReviews', 'plans', 'acks', 'variableAdjustments', 'monthlyVariables'].forEach(field => {
+      if (!data[field] || typeof data[field] !== 'object') data[field] = {};
+      if (!data[field].veronica) data[field].veronica = {};
+    });
+    changed = true;
+  }
+
+  // Edgar stays but moves from Bepensa to Spin Master.
+  const edgar = data.executives.find(e => e && e.id === 'edgar');
+  if (edgar && edgar.client === 'BEPENSA') {
+    edgar.client = 'SPIN MASTER';
+    edgar.roleLabel = SPIN_MASTER_ROLE_LABEL;
+    swapBepensaInKpis(edgar);
+    changed = true;
+  }
+
+  return changed;
+}
+// END MIGRATION
+
 function buildKpiList(defs){
   return defs.map(d => ({ id: d.id, name: d.name, desc: d.desc, considerations: d.considerations, weight: d.weight, effectiveFrom: d.effectiveFrom || null }));
 }
@@ -660,7 +725,7 @@ class Component extends DCLogic {
     role: 'manager',
     view: 'home',
     currentExecId: null,
-    ejecutivoViewId: 'daniela',
+    ejecutivoViewId: 'veronica',
     selectedMonth: CURRENT_MONTH,
     editingKpis: false,
     data: null,
@@ -732,13 +797,21 @@ class Component extends DCLogic {
       .then(r => r.ok ? r.json() : null)
       .then(payload => {
         if (payload && payload.data) {
+          // Admin sessions bring the stored data up to date (team change)
+          // before it is shown, and persist it only if something changed.
+          const migrated = session.role === 'admin' ? this.migrateToSpinMaster(payload.data) : false;
           this.setState({ data: payload.data });
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(payload.data))); } catch(e) {}
+          if (migrated) this.syncRemote(payload.data);
         } else if (session.role === 'admin') {
           this.syncRemote(this.state.data);
         }
       })
       .catch(() => {});
+  }
+
+  migrateToSpinMaster(data){
+    return migrateToSpinMasterData(data);
   }
 
   submitLogin(){
@@ -849,13 +922,13 @@ class Component extends DCLogic {
   }
 
   buildDefaultData(){
-    const daniela = {
-      id:'daniela', name:'Daniele Mena Rosales', roleLabel:'Promotoría Fija · Bepensa', client:'BEPENSA',
+    const veronica = {
+      id:'veronica', name:'Verónica Ochoa Manzo', roleLabel:'Ejecutivo de Cuenta · Spin Master', client:'SPIN MASTER', photoUrl:'assets/veronica-ochoa-manzo.jpg',
       categories: [
         { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
           {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 90% de días efectivos al mes.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
           {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega primeros 5 días hábiles del mes.', considerations:'Enviar soporte del 1 al 5 del mes.', weight:15},
-          {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'Enviar reporte de iniciativa corporativa para Bepensa o Evolve.', weight:10},
+          {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'Enviar reporte de iniciativa corporativa para Spin Master o Evolve.', weight:10},
           {id:'g4', name:'Envío y carga de plan de trabajo mensual', desc:'Entrega primeros 5 días.', considerations:'Para obtener la cobertura real a fin de mes.', weight:10},
           {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Análisis de cobertura semanal, riesgos por área y visibilidad por región.', weight:5},
           {id:'g6', name:'Entrega de reporte de cierre mensual Evolve', desc:'Entrega primeros 8 días.', considerations:'"Sello Evo": rotación, apego al plan, ventas, exhibiciones e iniciativas.', weight:15},
@@ -872,7 +945,7 @@ class Component extends DCLogic {
       ]
     };
     const edgar = {
-      id:'edgar', name:'Edgar Alan Obregón García', roleLabel:'Impulsores de Venta · Bepensa', client:'BEPENSA',
+      id:'edgar', name:'Edgar Alan Obregón García', roleLabel:'Ejecutivo de Cuenta · Spin Master', client:'SPIN MASTER',
       categories: [
         { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
           {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 85% de días efectivos respecto a la activación.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
@@ -914,14 +987,14 @@ class Component extends DCLogic {
     };
 
     const monthlyVariables = {
-      daniela: { '2026-06': 8000 },
+      veronica: { '2026-06': 8000 },
       edgar: { '2026-06': 8000 },
       marifer: { '2026-06': 7000 }
     };
 
-    const execs = [daniela, edgar, marifer];
+    const execs = [veronica, edgar, marifer];
     const bases = {
-      daniela: {'2026-02':76,'2026-03':80,'2026-04':85,'2026-05':88,'2026-06':91},
+      veronica: {'2026-02':76,'2026-03':80,'2026-04':85,'2026-05':88,'2026-06':91},
       edgar:   {'2026-02':85,'2026-03':80,'2026-04':75,'2026-05':68,'2026-06':72},
       marifer: {'2026-02':74,'2026-03':78,'2026-04':81,'2026-05':85,'2026-06':84}
     };
@@ -931,24 +1004,24 @@ class Component extends DCLogic {
       ex.categories.forEach(c => c.kpis.forEach(k => kpiIds.push(k.id)));
       scores[ex.id] = seedScores(ex.id, bases[ex.id], kpiIds);
     });
-    scores.daniela['2026-06'].g6.comment = 'Reporte de cierre completo y a tiempo, buen detalle en iniciativas. Sigue así.';
+    scores.veronica['2026-06'].g6.comment = 'Reporte de cierre completo y a tiempo, buen detalle en iniciativas. Sigue así.';
     scores.edgar['2026-06'].g6.comment = 'El cierre llegó con 2 días de retraso, ajustar para el próximo proyecto.';
     scores.marifer['2026-06'].g7.comment = 'Buen nivel de detalle, falta incluir comparativo de ventas vs. mes anterior.';
 
     const midReviews = {
-      daniela: { '2026-06': { note:'En buen camino, cuidar el detalle en el reporte de iniciativas.', status:'ok' } },
+      veronica: { '2026-06': { note:'En buen camino, cuidar el detalle en el reporte de iniciativas.', status:'ok' } },
       edgar: { '2026-06': { note:'Cierre de proyecto llegó tarde el mes pasado, seguimiento puntual esta semana para no repetirlo.', status:'atencion' } },
       marifer: { '2026-06': { note:'Buen ritmo general, falta reforzar comparativo de ventas en reportes al cliente.', status:'ok' } }
     };
 
     const plans = {
-      daniela: { '2026-06': [ { id:'p1', text:'Reforzar seguimiento de plan de trabajo antes del día 5', due:'2026-07-05', done:true } ] },
+      veronica: { '2026-06': [ { id:'p1', text:'Reforzar seguimiento de plan de trabajo antes del día 5', due:'2026-07-05', done:true } ] },
       edgar: { '2026-06': [ { id:'p1', text:'Adelantar cierre de proyecto 1 día para evitar retrasos', due:'2026-07-10', done:false } ] },
       marifer: { '2026-06': [ { id:'p1', text:'Agregar comparativo de ventas al reporte mensual', due:'2026-07-08', done:false } ] }
     };
-    const acks = { daniela:{}, edgar:{}, marifer:{} };
+    const acks = { veronica:{}, edgar:{}, marifer:{} };
     const logs = [
-      { ts: new Date('2026-06-29T10:15:00').getTime(), execId:'daniela', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' },
+      { ts: new Date('2026-06-29T10:15:00').getTime(), execId:'veronica', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' },
       { ts: new Date('2026-06-29T10:20:00').getTime(), execId:'edgar', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' },
       { ts: new Date('2026-06-29T10:25:00').getTime(), execId:'marifer', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' }
     ];
@@ -1010,6 +1083,7 @@ class Component extends DCLogic {
   clientLogo(client){
     if (client === 'BEPENSA') return 'assets/bepensa-logo.jpeg';
     if (client === 'GIFAN') return 'assets/gifan-logo.jpeg';
+    if (client === 'SPIN MASTER') return null; // sin logo por ahora: se muestra la etiqueta de texto
     return null;
   }
 
@@ -1310,8 +1384,17 @@ class Component extends DCLogic {
 
     const isAdminSession = !!(s.session && s.session.role === 'admin');
     const isExecSession = !!(s.session && s.session.role === 'ejecutivo');
-    const sessionExecName = (isExecSession && data.executives[0]) ? data.executives[0].name : null;
+    // Archived executives (people who left the team) keep their history in
+    // the data but must not show up anywhere a team roster is built.
+    const activeExecs = (data.executives || []).filter(e => !e.archived);
+    const sessionExec = isExecSession ? data.executives.find(e => e.id === s.session.execId) : null;
+    const sessionExecName = sessionExec ? sessionExec.name : null;
     const sessionLabel = sessionExecName || (s.session ? s.session.username : '');
+    // The admin "Ejecutivo" preview must always point at someone who is
+    // still on the team, even if the stored selection was archived.
+    const viewExecId = activeExecs.some(e => e.id === s.ejecutivoViewId)
+      ? s.ejecutivoViewId
+      : (activeExecs[0] ? activeExecs[0].id : s.ejecutivoViewId);
 
     const roleTabs = !isAdminSession ? [] : [
       { key:'manager', label:'Gerente Operaciones' },
@@ -1323,12 +1406,12 @@ class Component extends DCLogic {
       color: s.role === t.key ? accent : 'oklch(0.5 0.02 255)',
       onClick: () => {
         const next = { role: t.key, view: t.key === 'ejecutivo' ? 'detail' : 'home', editingKpis: false };
-        if (t.key === 'ejecutivo') next.currentExecId = s.ejecutivoViewId;
+        if (t.key === 'ejecutivo') next.currentExecId = viewExecId;
         this.setState(next);
       }
     }));
 
-    const execCards = data.executives.map(exec => {
+    const execCards = activeExecs.map(exec => {
       const totalNow = this.computeTotal(exec, s.selectedMonth);
       const showTotal = totalNow.isComplete ? totalNow.earned : null;
       const latest = this.latestCompletedMonth(exec, s.selectedMonth);
@@ -1360,8 +1443,9 @@ class Component extends DCLogic {
 
     const isManagerEditable = s.role === 'manager';
     let detail = null;
-    if (s.currentExecId){
-      const exec = data.executives.find(e => e.id === s.currentExecId);
+    const currentExec = s.currentExecId ? data.executives.find(e => e.id === s.currentExecId) : null;
+    if (currentExec){
+      const exec = currentExec;
       const totalNow = this.computeTotal(exec, s.selectedMonth);
       const status = this.statusFor(totalNow.isComplete ? totalNow.earned : (totalNow.isEmpty ? null : totalNow.earned));
       const chartMonths = MONTHS.map(m => ({ m, t: this.computeTotal(exec, m.value) }));
@@ -1549,7 +1633,7 @@ class Component extends DCLogic {
     const completeCards = execCards.filter(c => c.totalDisplay !== '—');
     const avgScore = completeCards.length ? Math.round(completeCards.reduce((a,c)=>a+parseInt(c.totalDisplay),0)/completeCards.length) : null;
     const heroStats = [
-      { value: String(data.executives.length), label: 'Ejecutivos' },
+      { value: String(activeExecs.length), label: 'Ejecutivos' },
       { value: avgScore !== null ? String(avgScore) : '—', label: 'Promedio equipo' }
     ];
 
@@ -1562,8 +1646,8 @@ class Component extends DCLogic {
       isReviewerRole: s.role === 'manager' || s.role === 'jefe',
       showExecSwitcher: s.role === 'ejecutivo' && isAdminSession,
       showRoleTabs: isAdminSession,
-      ejecutivoOptions: data.executives.map(e => ({ id:e.id, name:e.name })),
-      ejecutivoViewId: s.ejecutivoViewId,
+      ejecutivoOptions: activeExecs.map(e => ({ id:e.id, name:e.name })),
+      ejecutivoViewId: viewExecId,
       onEjecutivoSelect: e => this.setState({ ejecutivoViewId: e.target.value, currentExecId: e.target.value }),
       months: MONTHS,
       selectedMonth: s.selectedMonth,
