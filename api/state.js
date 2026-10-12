@@ -1,5 +1,6 @@
 const { getPool } = require('./_db');
 const { getSession } = require('./_auth');
+const { ensureFilesTable, newFileId, insertFile, extractInlineFiles } = require('./_files');
 
 const ROW_ID = 'default';
 
@@ -22,6 +23,27 @@ async function saveRow(db, data) {
      on conflict (id) do update set data = excluded.data, updated_at = now()`,
     [ROW_ID, data]
   );
+}
+
+function blobHasInlineFiles(data) {
+  return JSON.stringify(data.scores || {}).includes('"dataUrl":"');
+}
+
+async function moveInlineFilesOut(db) {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query('select data from kpi_repo_state where id = $1 for update', [ROW_ID]);
+    const data = rows[0].data;
+    if (await extractInlineFiles(client, data)) await saveRow(client, data);
+    await client.query('COMMIT');
+    return data;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // An "ejecutivo" session must never see or receive another executive's
@@ -63,7 +85,7 @@ function migrateAttachments(rec) {
   return rec.attachments;
 }
 
-function applyExecAction(data, execId, action) {
+async function applyExecAction(db, data, execId, action) {
   if (action.type === 'toggleplan') {
     const item = data.plans && data.plans[execId] && data.plans[execId][action.month] &&
       data.plans[execId][action.month].find(i => i.id === action.itemId);
@@ -104,14 +126,24 @@ function applyExecAction(data, execId, action) {
     if (attachments.length >= MAX_ATTACHMENTS_PER_KPI) {
       throw new HttpError(400, `Ya se alcanzó el máximo de ${MAX_ATTACHMENTS_PER_KPI} archivos para este KPI`);
     }
-    attachments.push({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    // Keep the browser's id when it is well-formed and unused, so the
+    // client's optimistic copy can download / remove it before a reload.
+    const clientId = typeof att.id === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(att.id) && !attachments.some(a => a && a.id === att.id) ? att.id : null;
+    const meta = {
+      id: clientId || newFileId(),
       name: att.name,
       type: typeof att.type === 'string' ? att.type : 'application/octet-stream',
       size: typeof att.size === 'number' ? att.size : null,
-      dataUrl: att.dataUrl,
       uploadedAt: Date.now()
-    });
+    };
+    await ensureFilesTable();
+    if (!(await insertFile(db, { ...meta, execId, month: action.month, kpiId: action.kpiId, dataUrl: att.dataUrl }))) {
+      meta.id = newFileId();
+      await insertFile(db, { ...meta, execId, month: action.month, kpiId: action.kpiId, dataUrl: att.dataUrl });
+    }
+    attachments.push(meta);
+    // A new file means the manager has something new to review.
+    if (rec.review && rec.review.status) rec.review = { status: 'pendiente', at: Date.now() };
     pushLog(data, execId, action.month, 'ejecutivo', `Adjuntó archivo "${att.name}" (${attachments.length}/${MAX_ATTACHMENTS_PER_KPI})`);
     return;
   }
@@ -121,7 +153,11 @@ function applyExecAction(data, execId, action) {
     if (rec) {
       const attachments = migrateAttachments(rec);
       const idx = attachments.findIndex(a => a.id === action.attachmentId);
-      if (idx !== -1) attachments.splice(idx, 1);
+      if (idx !== -1) {
+        attachments.splice(idx, 1);
+        await ensureFilesTable();
+        await db.query('delete from kpi_repo_files where id = $1 and exec_id = $2', [action.attachmentId, execId]);
+      }
     }
     pushLog(data, execId, action.month, 'ejecutivo', 'Eliminó archivo adjunto');
     return;
@@ -130,9 +166,50 @@ function applyExecAction(data, execId, action) {
   throw new HttpError(400, 'Acción no soportada');
 }
 
-// Attachments ride inside the shared JSON blob (no separate object storage
-// configured), so cap them well under Vercel's ~4.5MB serverless request
-// body limit once base64 overhead (~33%) is accounted for. A 3MB raw file
+// The manager's client saves the whole blob, from a copy loaded earlier.
+// Everything an ejecutivo owns (support files, their KPI comments, their
+// acknowledgements and their log lines) is taken from the current row
+// instead, so a manager save can never undo an upload or comment that
+// happened after the manager's page loaded.
+function mergeExecOwned(incoming, current) {
+  if (!current) return incoming;
+  const inScores = incoming.scores || (incoming.scores = {});
+  const curScores = current.scores || {};
+  const execIds = new Set([...Object.keys(inScores), ...Object.keys(curScores)]);
+  execIds.forEach(execId => {
+    const inMonths = inScores[execId] || (inScores[execId] = {});
+    const curMonths = curScores[execId] || {};
+    new Set([...Object.keys(inMonths), ...Object.keys(curMonths)]).forEach(month => {
+      const inKpis = inMonths[month] || (inMonths[month] = {});
+      const curKpis = curMonths[month] || {};
+      new Set([...Object.keys(inKpis), ...Object.keys(curKpis)]).forEach(kpiId => {
+        const cur = curKpis[kpiId];
+        const rec = inKpis[kpiId] || (inKpis[kpiId] = cur ? { ...cur } : { score: null, comment: '' });
+        delete rec.attachment;
+        if (cur && (cur.attachments || cur.attachment)) rec.attachments = cur.attachments || [cur.attachment];
+        else delete rec.attachments;
+        if (cur && cur.execComment !== undefined) rec.execComment = cur.execComment;
+        else delete rec.execComment;
+      });
+    });
+  });
+  incoming.acks = current.acks || {};
+  const seen = new Set();
+  incoming.logs = [...(current.logs || []), ...(incoming.logs || [])]
+    .filter(l => {
+      const key = `${l.ts}|${l.execId}|${l.role}|${l.text}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, 300);
+  return incoming;
+}
+
+// Each upload request still carries one file as base64, so cap it well
+// under Vercel's ~4.5MB serverless request body limit once base64 overhead
+// (~33%) is accounted for. A 3MB raw file
 // base64-encodes to exactly 4MB; 4.2MB leaves headroom for the data-URI
 // prefix and JSON wrapper while staying clear of the 4.5MB hard limit.
 const MAX_ATTACHMENT_DATA_URL_LENGTH = 4.2 * 1024 * 1024;
@@ -149,11 +226,12 @@ module.exports = async (req, res) => {
   const db = getPool();
   try {
     if (req.method === 'GET') {
-      const data = await fetchRow(db);
+      let data = await fetchRow(db);
       if (!data) {
         res.status(200).json({ data: null });
         return;
       }
+      if (blobHasInlineFiles(data)) data = await moveInlineFilesOut(db);
       res.status(200).json({
         data: session.role === 'admin' ? data : filterForExec(data, session.execId)
       });
@@ -169,7 +247,22 @@ module.exports = async (req, res) => {
           res.status(400).json({ error: 'Missing data' });
           return;
         }
-        await saveRow(db, data);
+        const client = await db.connect();
+        try {
+          await client.query('BEGIN');
+          const { rows } = await client.query('select data from kpi_repo_state where id = $1 for update', [ROW_ID]);
+          const current = rows[0] ? rows[0].data : null;
+          if (current) await extractInlineFiles(client, current);
+          const merged = mergeExecOwned(data, current);
+          await extractInlineFiles(client, merged);
+          await saveRow(client, merged);
+          await client.query('COMMIT');
+        } catch (err) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw err;
+        } finally {
+          client.release();
+        }
         res.status(200).json({ ok: true });
         return;
       }
@@ -199,7 +292,8 @@ module.exports = async (req, res) => {
           throw new HttpError(404, 'Sin datos');
         }
 
-        applyExecAction(data, execId, action);
+        await extractInlineFiles(client, data);
+        await applyExecAction(client, data, execId, action);
 
         await client.query(
           `insert into kpi_repo_state (id, data, updated_at)

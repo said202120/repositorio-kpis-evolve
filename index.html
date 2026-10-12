@@ -441,6 +441,9 @@
                         <div style="font-size:14px;font-weight:600">{{ kpi.name }}</div>
                       </sc-if>
                       <div style="font-size:11px;font-weight:700;color:oklch(0.5 0.02 255);background:oklch(0.95 0.01 255);padding:2px 8px;border-radius:99px">{{ kpi.weight }} pts</div>
+                      <sc-if value="{{kpi.okr}}" hint-placeholder-val="{{false}}">
+                        <div style="font-size:10.5px;font-weight:700;color:oklch(0.45 0.12 300);background:oklch(0.95 0.035 300);padding:2px 8px;border-radius:99px">OKR · {{ kpi.okr }}</div>
+                      </sc-if>
                     </div>
                     <div style="font-size:12.5px;color:oklch(0.48 0.02 255);margin-top:5px;line-height:1.5">{{ kpi.desc }}</div>
                     <div style="font-size:11.5px;color:oklch(0.6 0.02 255);margin-top:4px;font-style:italic">{{ kpi.considerations }}</div>
@@ -459,6 +462,11 @@
                         <div style="width:38px;text-align:right;font-weight:800;font-size:15px;font-family:Sora,sans-serif;color:{{kpi.scoreColor}}">{{ kpi.scoreDisplay }}</div>
                       </div>
                       <textarea placeholder="Comentario de retroalimentación…" value="{{kpi.comment}}" onChange="{{kpi.onCommentChange}}" style="width:100%;margin-top:10px;border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-family:Inter,sans-serif;font-size:12.5px;resize:vertical;min-height:44px"></textarea>
+                      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                        <sc-for list="{{kpi.reviewOptions}}" as="opt" hint-placeholder-count="2">
+                          <button onClick="{{opt.onClick}}" style="flex:1;border:1.5px solid {{opt.color}};background:{{opt.bg}};color:{{opt.fg}};font-size:11.5px;font-weight:700;padding:6px 8px;border-radius:8px;cursor:pointer;font-family:Inter,sans-serif">{{ opt.label }}</button>
+                        </sc-for>
+                      </div>
                     </sc-if>
                     <sc-if value="{{kpi.readOnly}}" hint-placeholder-val="{{true}}">
                       <div style="display:flex;align-items:center;gap:10px">
@@ -469,6 +477,9 @@
                       </div>
                       <sc-if value="{{kpi.showComment}}" hint-placeholder-val="{{false}}">
                         <div style="margin-top:9px;font-size:12.5px;color:oklch(0.4 0.02 255);background:oklch(0.97 0.006 255);border-radius:9px;padding:9px 11px;line-height:1.5">“{{ kpi.comment }}”</div>
+                      </sc-if>
+                      <sc-if value="{{kpi.hasReview}}" hint-placeholder-val="{{false}}">
+                        <div style="margin-top:8px;display:inline-block;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;background:{{kpi.reviewBg}};color:{{kpi.reviewColor}}">{{ kpi.reviewLabel }}</div>
                       </sc-if>
                     </sc-if>
                   </div>
@@ -492,7 +503,7 @@
                           <sc-for list="{{kpi.attachments}}" as="file" hint-placeholder-count="2">
                             <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px">
                               <span>📎</span>
-                              <a href="{{file.dataUrl}}" download="{{file.name}}" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                              <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
                               <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
                               <button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
                             </div>
@@ -530,8 +541,9 @@
                           <sc-for list="{{kpi.attachments}}" as="file" hint-placeholder-count="2">
                             <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px">
                               <span>📎</span>
-                              <a href="{{file.dataUrl}}" download="{{file.name}}" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                              <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
                               <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
+                              <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="flex:none;font-size:11px;font-weight:700;color:white;background:{{brand.accent}};padding:4px 9px;border-radius:7px;text-decoration:none">Descargar</a>
                             </div>
                           </sc-for>
                         </div>
@@ -620,6 +632,12 @@ function monthX(i, width, offset){
   return (i * (width / Math.max(MONTHS.length - 1, 1))) + offset;
 }
 const STORAGE_KEY = 'evolve-kpi-repo-v1';
+// Manager's verdict on the evidence an ejecutivo uploaded for one KPI/month.
+const REVIEW_STATUS = {
+  aprobado: { label: '✓ Evidencia aprobada', button: '✓ Aprobar', color: 'oklch(0.45 0.13 150)', bg: 'oklch(0.94 0.05 150)' },
+  cambios: { label: '↺ Evidencia con ajustes pendientes', button: '↺ Pedir ajustes', color: 'oklch(0.52 0.15 60)', bg: 'oklch(0.95 0.07 85)' },
+  pendiente: { label: '● Archivo nuevo por revisar', button: '', color: 'oklch(0.45 0.15 254)', bg: 'oklch(0.94 0.035 254)' }
+};
 
 function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 
@@ -712,7 +730,67 @@ function migrateToSpinMasterData(data){
 // END MIGRATION
 
 function buildKpiList(defs){
-  return defs.map(d => ({ id: d.id, name: d.name, desc: d.desc, considerations: d.considerations, weight: d.weight, effectiveFrom: d.effectiveFrom || null }));
+  return defs.map(d => ({ id: d.id, name: d.name, desc: d.desc, considerations: d.considerations, weight: d.weight, effectiveFrom: d.effectiveFrom || null, okr: d.okr || null }));
+}
+
+// Spin Master KPIs as defined by the manager for Oct 2026 (KPIs_Spin_Master
+// Excel). Ids are kept from the previous set so nothing already stored
+// under them is orphaned.
+const SPIN_KPIS_VERSION = 'spin-master-kpis-2026-10';
+function veronicaSpinCategories(){
+  return [
+    { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
+      {id:'g1', name:'Tasa de ausentismo', desc:'Tener por lo menos 85% de días efectivos al mes.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5, okr:'Equipo de promotoría'},
+      {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega los primeros 5 días hábiles del mes.', considerations:'Enviar soporte del 1 al 5 del mes.', weight:15, okr:'Administrativo'},
+      {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega los primeros 10 días.', considerations:'Enviar reporte de iniciativa corporativa para el cliente o para Evolve.', weight:10, okr:'Servicio de reporteo al cliente'},
+      {id:'g4', name:'Envío de Maestro y Plan de Trabajo actualizado (semanal)', desc:'Todos los lunes.', considerations:'Se carga a Drive y los cruces deben coincidir entre ambos archivos, todo sin acentos, dobles espacios, etc.', weight:10, okr:'Eficiencia operativa'},
+      {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Análisis de la cobertura semanal de promotoría fija y temporal, identificando riesgos por área y dando visibilidad por región.', weight:5, okr:'Eficiencia operativa'},
+      {id:'g6', name:'Entrega de iniciativas Evolve (adicionales a los sondeos de Emetrix)', desc:'Entrega los primeros 8 días.', considerations:'Reporte de cierre de mes: botargas, activaciones, tareas del mes, prioridades y peticiones adicionales del cliente.', weight:15, okr:'Servicio de reporteo al cliente'},
+      {id:'g7', name:'Salida a campo mensual', desc:'Una salida a campo cada quincena (2 al mes) con reporte de hallazgos en punto de venta.', considerations:'Cargar la presentación de hallazgos como archivo de soporte del KPI.', weight:10, effectiveFrom:'2026-07', okr:'Equipo de promotoría'}
+    ])},
+    { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
+      {id:'c1', name:'Satisfacción del cliente', desc:'Calificación en revisiones periódicas / sin llamadas de atención / relación con coordinadores y supervisores.', considerations:'Durante el mes se evalúa que el cliente no haya tenido molestias o comentarios negativos sobre el seguimiento diario.', weight:5, okr:'Servicio de reporteo al cliente'},
+      {id:'c2', name:'Auditorías aprobadas', desc:'% de supervisiones con resultado satisfactorio.', considerations:'Revisión de master y plan de trabajo vs. HC o presupuesto, validando que todo esté en orden y actualizado.', weight:5, okr:'Eficiencia operativa'}
+    ])},
+    { id:'admin', name:'Administración', kpis: buildKpiList([
+      {id:'a1', name:'Precisión en nómina', desc:'Incidencias de nómina correctas / total × 100.', considerations:'Cero errores en nómina, bonos ingresados en tiempo y forma, y altas al corte capturadas en los archivos. Envío según el calendario de nóminas.', weight:5, okr:'Administrativo'},
+      {id:'a2', name:'Comprobación de gastos', desc:'Facturas en portal / todos los gastos comprobados al menos al 90% 4 días hábiles antes del cierre de mes.', considerations:'Facturas en portal a tiempo.', weight:15, okr:'Administrativo'}
+    ])}
+  ];
+}
+function alanSpinCategories(){
+  return [
+    { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
+      {id:'g1', name:'Tasa de ausentismo', desc:'Tener por lo menos 85% de días efectivos respecto a la activación.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5, okr:'Equipo de promotoría'},
+      {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega los primeros 5 días hábiles.', considerations:'Enviar del 1 al 5 para que el día 5 se revise y homologue.', weight:15, okr:'Administrativo'},
+      {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega los primeros 10 días.', considerations:'Reporte de iniciativas corporativas a total proyectos, del 1 al 5 de cada mes.', weight:10, okr:'Servicio de reporteo al cliente'},
+      {id:'g4', name:'Envío de información de activación (domingos)', desc:'Todos los domingos, al cierre de las activaciones.', considerations:'Al haber culminado los días de activación; puede enviarse por WhatsApp.', weight:10, okr:'Servicio de reporteo al cliente'},
+      {id:'g5', name:'Salida de campo y hallazgos (reporte)', desc:'Dos salidas mensuales con reporte de valor para el cliente.', considerations:'Enviar los primeros 5 días.', weight:15, okr:'Equipo de promotoría'},
+      {id:'g6', name:'Entrega de cierre de proyecto', desc:'Entrega los primeros 3 días hábiles tras terminar el proyecto.', considerations:'Hallazgos, ventas, casos de éxito y mejoras para presentar al cliente.', weight:20, okr:'Servicio de reporteo al cliente'}
+    ])},
+    { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
+      {id:'c1', name:'Auditorías aprobadas', desc:'% de supervisiones con resultado satisfactorio.', considerations:'Revisión de master y plan de trabajo vs. HC o presupuesto.', weight:5, okr:'Eficiencia operativa'}
+    ])},
+    { id:'admin', name:'Administración', kpis: buildKpiList([
+      {id:'a1', name:'Precisión en nómina', desc:'Incidencias de nómina correctas / total × 100.', considerations:'Cero errores, bonos en tiempo y forma.', weight:5, okr:'Administrativo'},
+      {id:'a2', name:'Comprobación de gastos', desc:'Facturas en portal / sin gastos con más de 10 días sin comprobar.', considerations:'Facturas en portal a tiempo.', weight:15, okr:'Administrativo'}
+    ])}
+  ];
+}
+
+// Loads the Spin Master KPI set into the stored blob once (admin load),
+// then leaves it alone so later edits made with "Editar KPIs" stick.
+function migrateSpinKpisData(data){
+  if (!data || !Array.isArray(data.executives)) return false;
+  if (!Array.isArray(data.migrations)) data.migrations = [];
+  if (data.migrations.includes(SPIN_KPIS_VERSION)) return false;
+  const set = { veronica: veronicaSpinCategories, edgar: alanSpinCategories };
+  Object.keys(set).forEach(id => {
+    const exec = data.executives.find(e => e && e.id === id && !e.archived);
+    if (exec) exec.categories = set[id]();
+  });
+  data.migrations.push(SPIN_KPIS_VERSION);
+  return true;
 }
 
 // A fresh database starts with every selectable month unscored.
@@ -804,7 +882,9 @@ class Component extends DCLogic {
         if (payload && payload.data) {
           // Admin sessions bring the stored data up to date (team change)
           // before it is shown, and persist it only if something changed.
-          const migrated = session.role === 'admin' ? this.migrateToSpinMaster(payload.data) : false;
+          const migrated = session.role === 'admin'
+            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data)].some(Boolean)
+            : false;
           this.setState({ data: payload.data });
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(payload.data))); } catch(e) {}
           if (migrated) this.syncRemote(payload.data);
@@ -813,6 +893,23 @@ class Component extends DCLogic {
         }
       })
       .catch(() => {});
+  }
+
+  // Re-reads the stored data so the manager sees files and comments the
+  // team added after this page loaded. Skipped if a save started meanwhile,
+  // so a fresh local edit is never replaced by an older server copy.
+  refreshRemote(){
+    if (!this.state.session || this.state.session.role !== 'admin') return;
+    const pending = this.__lastSavePromise || Promise.resolve();
+    pending.then(() => {
+      const seq = this.__saveSeq || 0;
+      return fetch('/api/state', { credentials: 'include' })
+        .then(r => r.ok ? r.json() : null)
+        .then(payload => {
+          if (!payload || !payload.data || (this.__saveSeq || 0) !== seq) return;
+          this.setState({ data: payload.data });
+        });
+    }).catch(() => {});
   }
 
   migrateToSpinMaster(data){
@@ -887,6 +984,7 @@ class Component extends DCLogic {
     const isExec = this.state.session && this.state.session.role === 'ejecutivo';
     if (isExec && !action) return Promise.resolve();
     this.setState({ saveStatus: 'saving' });
+    this.__saveSeq = (this.__saveSeq || 0) + 1;
     const p = fetch('/api/state', {
       method: 'POST',
       credentials: 'include',
@@ -929,45 +1027,11 @@ class Component extends DCLogic {
   buildDefaultData(){
     const veronica = {
       id:'veronica', name:'Verónica Ochoa Manzo', roleLabel:'Ejecutivo de Cuenta · Spin Master', client:'SPIN MASTER', photoUrl:'assets/veronica-ochoa-manzo.jpg',
-      categories: [
-        { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
-          {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 90% de días efectivos al mes.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
-          {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega primeros 5 días hábiles del mes.', considerations:'Enviar soporte del 1 al 5 del mes.', weight:15},
-          {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'Enviar reporte de iniciativa corporativa para Spin Master o Evolve.', weight:10},
-          {id:'g4', name:'Envío y carga de plan de trabajo mensual', desc:'Entrega primeros 5 días.', considerations:'Para obtener la cobertura real a fin de mes.', weight:10},
-          {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Análisis de cobertura semanal, riesgos por área y visibilidad por región.', weight:5},
-          {id:'g6', name:'Entrega de reporte de cierre mensual Evolve', desc:'Entrega primeros 8 días.', considerations:'"Sello Evo": rotación, apego al plan, ventas, exhibiciones e iniciativas.', weight:15},
-          {id:'g7', name:'Salida a Campo Mensual', desc:'Realizar una salida a campo cada quincena (2 veces al mes) y generar un reporte con los hallazgos encontrados en punto de venta.', considerations:'Cargar la presentación de hallazgos como archivo de soporte de este KPI.', weight:10, effectiveFrom:'2026-07'}
-        ])},
-        { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
-          {id:'c1', name:'Satisfacción del cliente', desc:'Calificación en revisiones periódicas / relación con coordinadores y supervisores.', considerations:'Sin molestias o comentarios negativos durante el mes.', weight:5},
-          {id:'c2', name:'Auditorías aprobadas', desc:'% de supervisiones con resultado satisfactorio.', considerations:'Revisión de master y plan de trabajo vs HC/presupuesto.', weight:5}
-        ])},
-        { id:'admin', name:'Administración', kpis: buildKpiList([
-          {id:'a1', name:'Precisión en nómina', desc:'Incidencias de nómina correctas / total × 100.', considerations:'Cero errores, bonos en tiempo y forma.', weight:5},
-          {id:'a2', name:'Comprobación de gastos', desc:'Facturas en portal / sin gastos con más de 10 días sin comprobar.', considerations:'Facturas en portal a tiempo.', weight:15}
-        ])}
-      ]
+      categories: veronicaSpinCategories()
     };
     const edgar = {
       id:'edgar', name:'Edgar Alan Obregón García', roleLabel:'Ejecutivo de Cuenta · Spin Master', client:'SPIN MASTER',
-      categories: [
-        { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
-          {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 85% de días efectivos respecto a la activación.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
-          {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega primeros 5 días hábiles.', considerations:'Enviar del 1 al 5 para revisión y homologación.', weight:15},
-          {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'A total proyectos, del 1 al 5 de cada mes.', weight:10},
-          {id:'g4', name:'Envío de reporte semanal de activación', desc:'Martes a semana vencida.', considerations:'Al haber culminado los días de activación.', weight:10},
-          {id:'g5', name:'Salida de campo y hallazgos (reporte)', desc:'Dos salidas mensuales con reporte de valor para el cliente.', considerations:'Enviar primeros 5 días.', weight:15},
-          {id:'g6', name:'Entrega de cierre de proyecto', desc:'Entrega primeros 3 días hábiles tras terminar el proyecto.', considerations:'Hallazgos, ventas, casos de éxito y mejoras.', weight:20}
-        ])},
-        { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
-          {id:'c1', name:'Auditorías aprobadas', desc:'% de supervisiones con resultado satisfactorio.', considerations:'Revisión de master y plan de trabajo vs HC/presupuesto.', weight:5}
-        ])},
-        { id:'admin', name:'Administración', kpis: buildKpiList([
-          {id:'a1', name:'Precisión en nómina', desc:'Incidencias de nómina correctas / total × 100.', considerations:'Cero errores, bonos en tiempo y forma.', weight:5},
-          {id:'a2', name:'Comprobación de gastos', desc:'Facturas en portal / sin gastos con más de 10 días sin comprobar.', considerations:'Facturas en portal a tiempo.', weight:15}
-        ])}
-      ]
+      categories: alanSpinCategories()
     };
     const marifer = {
       id:'marifer', name:'María Fernanda Quintanar', roleLabel:'Ejecutivo de Cuenta · Gifan', client:'GIFAN',
@@ -1004,7 +1068,7 @@ class Component extends DCLogic {
     });
     const logs = [];
 
-    return { executives: execs, scores, midReviews, plans, acks, logs, variableAdjustments: {}, monthlyVariables };
+    return { executives: execs, scores, midReviews, plans, acks, logs, variableAdjustments: {}, monthlyVariables, migrations: [SPIN_KPIS_VERSION] };
   }
 
   saveData(data, action){
@@ -1144,6 +1208,19 @@ class Component extends DCLogic {
     if (!data.scores[execId][month]) data.scores[execId][month] = {};
     if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score:null, comment:'' };
     data.scores[execId][month][kpiId].comment = val;
+    this.saveData(data);
+  }
+
+  setReview(execId, month, kpiId, status){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.scores[execId][month]) data.scores[execId][month] = {};
+    if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score:null, comment:'' };
+    const rec = data.scores[execId][month][kpiId];
+    if (status) rec.review = { status, at: Date.now() };
+    else delete rec.review;
+    const { kpi } = this.findKpi(data, execId, kpiId);
+    const name = kpi ? kpi.name : kpiId;
+    this.addLog(data, execId, month, status === 'aprobado' ? `Aprobó la evidencia de "${name}"` : status === 'cambios' ? `Pidió ajustes en la evidencia de "${name}"` : `Quitó la revisión de evidencia de "${name}"`);
     this.saveData(data);
   }
 
@@ -1415,7 +1492,7 @@ class Component extends DCLogic {
         sparkPoints, sparkDots,
         pendingNote: showTotal === null ? `Pendiente de calificar ${monthLabelOf(s.selectedMonth)}${latest ? ' · último: ' + latest.month.label + ' (' + latest.total.earned + ')' : ''}` : null,
         alertNote,
-        openHandler: () => this.setState({ view:'detail', currentExecId: exec.id })
+        openHandler: () => { this.setState({ view:'detail', currentExecId: exec.id }); this.refreshRemote(); }
       };
     });
 
@@ -1450,11 +1527,26 @@ class Component extends DCLogic {
           const editable = isManagerEditable;
           const attachmentsList = (rec.attachments || (rec.attachment ? [rec.attachment] : [])).map(a => ({
             ...a,
+            // Files live in their own table now; a freshly uploaded one is
+            // still in memory as a data URL until the next reload.
+            downloadUrl: a.dataUrl || ('/api/file?id=' + encodeURIComponent(a.id || '')),
             sizeDisplay: fmtBytes(a.size),
             onRemove: () => this.removeKpiFile(exec.id, s.selectedMonth, k.id, a.id)
           }));
+          const review = REVIEW_STATUS[(rec.review && rec.review.status) || ''] || null;
           return {
             id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight, icon: this.kpiIcon(k.name),
+            okr: k.okr || null,
+            hasReview: !!review,
+            reviewLabel: review ? review.label : '',
+            reviewColor: review ? review.color : '',
+            reviewBg: review ? review.bg : '',
+            reviewOptions: ['aprobado', 'cambios'].map(key => {
+              const active = rec.review && rec.review.status === key;
+              const st = REVIEW_STATUS[key];
+              return { label: st.button, color: st.color, bg: active ? st.color : 'white', fg: active ? 'white' : st.color,
+                onClick: () => this.setReview(exec.id, s.selectedMonth, k.id, active ? null : key) };
+            }),
             editing: s.editingKpis && isManagerEditable,
             notEditing: !(s.editingKpis && isManagerEditable),
             canScore: editable,
