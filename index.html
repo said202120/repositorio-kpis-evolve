@@ -604,13 +604,19 @@
 </sc-if>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900},&quot;alertThreshold&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:80,&quot;min&quot;:50,&quot;max&quot;:95,&quot;step&quot;:5,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Comportamiento&quot;},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;oklch(0.58 0.19 254)&quot;,&quot;options&quot;:[&quot;oklch(0.58 0.19 254)&quot;,&quot;oklch(0.55 0.19 230)&quot;,&quot;oklch(0.52 0.20 264)&quot;,&quot;oklch(0.6 0.17 245)&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Marca&quot;},&quot;showComments&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Comportamiento&quot;}}">
-const CURRENT_MONTH = '2026-07';
+// Evaluated period: last quarter of 2026. Older months (Jun/Jul 2026) stay
+// in the stored blob as history; they are just no longer selectable.
+const CURRENT_MONTH = '2026-10';
 const MONTHS = [
-  {value:'2026-06',label:'Jun 2026'},
-  {value:'2026-07',label:'Jul 2026'}
+  {value:'2026-10',label:'Oct 2026'},
+  {value:'2026-11',label:'Nov 2026'},
+  {value:'2026-12',label:'Dic 2026'}
 ];
+// x position of month index i on a chart that spans `width` px.
+function monthX(i, width, offset){
+  return (i * (width / Math.max(MONTHS.length - 1, 1))) + offset;
+}
 const STORAGE_KEY = 'evolve-kpi-repo-v1';
-const JITTER = [4,-3,2,-5,3,-2,5];
 
 function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 
@@ -706,16 +712,12 @@ function buildKpiList(defs){
   return defs.map(d => ({ id: d.id, name: d.name, desc: d.desc, considerations: d.considerations, weight: d.weight, effectiveFrom: d.effectiveFrom || null }));
 }
 
-function seedScores(execId, bases, kpiIds){
+// A fresh database starts with every selectable month unscored.
+function seedScores(kpiIds){
   const scores = {};
-  MONTHS.forEach((m, mi) => {
+  MONTHS.forEach(m => {
     scores[m.value] = {};
-    kpiIds.forEach((id, ki) => {
-      if (m.value === CURRENT_MONTH) { scores[m.value][id] = { score: null, comment: '' }; return; }
-      const base = bases[m.value];
-      const val = clamp(Math.round(base + JITTER[ki % JITTER.length]), 0, 100);
-      scores[m.value][id] = { score: val, comment: '' };
-    });
+    kpiIds.forEach(id => { scores[m.value][id] = { score: null, comment: '' }; });
   });
   return scores;
 }
@@ -986,45 +988,18 @@ class Component extends DCLogic {
       ]
     };
 
-    const monthlyVariables = {
-      veronica: { '2026-06': 8000 },
-      edgar: { '2026-06': 8000 },
-      marifer: { '2026-06': 7000 }
-    };
-
     const execs = [veronica, edgar, marifer];
-    const bases = {
-      veronica: {'2026-02':76,'2026-03':80,'2026-04':85,'2026-05':88,'2026-06':91},
-      edgar:   {'2026-02':85,'2026-03':80,'2026-04':75,'2026-05':68,'2026-06':72},
-      marifer: {'2026-02':74,'2026-03':78,'2026-04':81,'2026-05':85,'2026-06':84}
-    };
-    const scores = {};
+    const scores = {}, midReviews = {}, plans = {}, acks = {}, monthlyVariables = {};
     execs.forEach(ex => {
       const kpiIds = [];
       ex.categories.forEach(c => c.kpis.forEach(k => kpiIds.push(k.id)));
-      scores[ex.id] = seedScores(ex.id, bases[ex.id], kpiIds);
+      scores[ex.id] = seedScores(kpiIds);
+      midReviews[ex.id] = {};
+      plans[ex.id] = {};
+      acks[ex.id] = {};
+      monthlyVariables[ex.id] = {};
     });
-    scores.veronica['2026-06'].g6.comment = 'Reporte de cierre completo y a tiempo, buen detalle en iniciativas. Sigue así.';
-    scores.edgar['2026-06'].g6.comment = 'El cierre llegó con 2 días de retraso, ajustar para el próximo proyecto.';
-    scores.marifer['2026-06'].g7.comment = 'Buen nivel de detalle, falta incluir comparativo de ventas vs. mes anterior.';
-
-    const midReviews = {
-      veronica: { '2026-06': { note:'En buen camino, cuidar el detalle en el reporte de iniciativas.', status:'ok' } },
-      edgar: { '2026-06': { note:'Cierre de proyecto llegó tarde el mes pasado, seguimiento puntual esta semana para no repetirlo.', status:'atencion' } },
-      marifer: { '2026-06': { note:'Buen ritmo general, falta reforzar comparativo de ventas en reportes al cliente.', status:'ok' } }
-    };
-
-    const plans = {
-      veronica: { '2026-06': [ { id:'p1', text:'Reforzar seguimiento de plan de trabajo antes del día 5', due:'2026-07-05', done:true } ] },
-      edgar: { '2026-06': [ { id:'p1', text:'Adelantar cierre de proyecto 1 día para evitar retrasos', due:'2026-07-10', done:false } ] },
-      marifer: { '2026-06': [ { id:'p1', text:'Agregar comparativo de ventas al reporte mensual', due:'2026-07-08', done:false } ] }
-    };
-    const acks = { veronica:{}, edgar:{}, marifer:{} };
-    const logs = [
-      { ts: new Date('2026-06-29T10:15:00').getTime(), execId:'veronica', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' },
-      { ts: new Date('2026-06-29T10:20:00').getTime(), execId:'edgar', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' },
-      { ts: new Date('2026-06-29T10:25:00').getTime(), execId:'marifer', month:'2026-06', role:'manager', text:'Guardó revisión de medio de mes' }
-    ];
+    const logs = [];
 
     return { executives: execs, scores, midReviews, plans, acks, logs, variableAdjustments: {}, monthlyVariables };
   }
@@ -1116,7 +1091,7 @@ class Component extends DCLogic {
   }
 
   computeTotal(exec, month){
-    const monthScores = this.state.data.scores[exec.id][month] || {};
+    const monthScores = ((this.state.data.scores || {})[exec.id] || {})[month] || {};
     let earned = 0, filled = 0, total = 0;
     exec.categories.forEach(cat => cat.kpis.forEach(k => {
       if (k.effectiveFrom && k.effectiveFrom > month) return;
@@ -1369,7 +1344,7 @@ class Component extends DCLogic {
     const cat = data.executives.find(e => e.id === execId).categories.find(c => c.id === catId);
     const newId = catId[0] + (cat.kpis.length + 1) + '_' + Date.now();
     cat.kpis.push({ id: newId, name:'Nuevo KPI', desc:'Describe el indicador.', considerations:'', weight:5 });
-    MONTHS.forEach(m => { if (!data.scores[execId][m.value]) data.scores[execId][m.value] = {}; data.scores[execId][m.value][newId] = { score: m.value === CURRENT_MONTH ? null : 0, comment:'' }; });
+    MONTHS.forEach(m => { if (!data.scores[execId][m.value]) data.scores[execId][m.value] = {}; data.scores[execId][m.value][newId] = { score: null, comment:'' }; });
     this.saveData(data);
   }
 
@@ -1417,11 +1392,11 @@ class Component extends DCLogic {
       const latest = this.latestCompletedMonth(exec, s.selectedMonth);
       const displayScore = showTotal !== null ? showTotal : (latest ? latest.total.earned : null);
       const status = this.statusFor(displayScore);
-      const sparkMonths = MONTHS.filter(m => this.computeTotal(exec, m.value).isComplete);
-      const n = Math.max(sparkMonths.length, 1);
-      const sparkVals = sparkMonths.map(m => this.computeTotal(exec, m.value).earned);
-      const sparkPoints = sparkVals.map((v,i) => `${(i*(280/(n-1||1)))+10},${60 - (v/100*50)}`).join(' ');
-      const sparkDots = sparkVals.map((v,i) => ({ cx:(i*(280/(n-1||1)))+10, cy: 60 - (v/100*50) }));
+      // Each scored month sits at its own slot in the quarter, so a lone
+      // October score is a single dot on the left, not a stretched line.
+      const sparkSeries = MONTHS.map((m, i) => ({ i, t: this.computeTotal(exec, m.value) })).filter(x => x.t.isComplete);
+      const sparkPoints = sparkSeries.map(x => `${monthX(x.i, 280, 10)},${60 - (x.t.earned/100*50)}`).join(' ');
+      const sparkDots = sparkSeries.map(x => ({ cx: monthX(x.i, 280, 10), cy: 60 - (x.t.earned/100*50) }));
       const alertNote = latest && latest.total.earned < (this.props.alertThreshold ?? 80) ? `${latest.month.label}: ${latest.total.earned} pts, por debajo del umbral` : null;
       const cardMonthly = this.monthlyVariableFor(exec.id, s.selectedMonth);
       const variableDisplay = showTotal !== null ? `${fmtMoney(cardMonthly * (showTotal/100))} de ${fmtMoney(cardMonthly)}` : 'Pendiente';
@@ -1453,12 +1428,12 @@ class Component extends DCLogic {
       const yFor = v => 100 - (v/100*80);
       const chartPoints = chartMonths.filter(x => x.t.isComplete).map((x,i,arr) => {
         const idx = chartMonths.indexOf(x);
-        return `${(idx*(580/(MONTHS.length-1)))+20},${yFor(x.t.earned)}`;
+        return `${monthX(idx, 580, 20)},${yFor(x.t.earned)}`;
       }).join(' ');
       const chartDots = chartMonths.map((x,idx) => x.t.isComplete ? {
-        cx: (idx*(580/(MONTHS.length-1)))+20, cy: yFor(x.t.earned), fill: accent
+        cx: monthX(idx, 580, 20), cy: yFor(x.t.earned), fill: accent
       } : null).filter(Boolean);
-      const chartLabels = chartMonths.map((x,idx) => ({ x:(idx*(580/(MONTHS.length-1)))+20, text: x.m.label.split(' ')[0] }));
+      const chartLabels = chartMonths.map((x,idx) => ({ x:monthX(idx, 580, 20), text: x.m.label.split(' ')[0] }));
 
       const categories = exec.categories.map(cat => {
         const monthScores = data.scores[exec.id][s.selectedMonth] || {};
