@@ -1,0 +1,92 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1743px;height:1347px;background:#fff;font-family:Inter,sans-serif;overflow:hidden}
+  .banner{position:absolute;left:0;top:182px;width:1743px;height:983px;overflow:hidden;
+    background:
+      radial-gradient(ellipse 620px 520px at 50% 52%, rgba(20,6,60,.55), transparent 70%),
+      linear-gradient(135deg,#2b0f7a 0%,#4b14a8 38%,#7a1bb0 66%,#c4206f 100%);}
+  .dots{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.10) 2px,transparent 2.5px);background-size:46px 46px}
+  .toy{position:absolute;line-height:1;opacity:.5;filter:saturate(1.15) drop-shadow(0 8px 14px rgba(0,0,0,.35))}
+  .conf{position:absolute;border-radius:4px;opacity:.75}
+  .evolve{position:absolute;left:28px;top:30px;width:175px;height:74px;background:#fff;border-radius:14px;border:3px solid #ffd23f;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .evolve img{width:146px}
+  .sm-logo{position:absolute;left:50%;top:24px;transform:translateX(-50%)}
+  h1{position:absolute;top:126px;width:100%;text-align:center;color:#fff;font-weight:800;font-size:44px;letter-spacing:3px;text-shadow:0 4px 18px rgba(0,0,0,.35)}
+  .sub{position:absolute;top:188px;width:100%;text-align:center;color:#ffd23f;font-weight:800;font-size:27px;letter-spacing:8px}
+  .node{position:absolute;width:640px;display:flex;flex-direction:column;align-items:center}
+  .ring{width:150px;height:150px;border-radius:50%;padding:7px;background:conic-gradient(#ffd23f 0 25%,#ff4f8b 0 50%,#2ec4ff 0 75%,#7cf27a 0);box-shadow:0 0 0 8px rgba(255,255,255,.08),0 16px 40px rgba(0,0,0,.4)}
+  .ring.boss{width:166px;height:166px}
+  .photo{width:100%;height:100%;border-radius:50%;background:#fff center/cover no-repeat;border:5px solid #fff}
+  .initials{display:flex;align-items:center;justify-content:center;background:#ffe7f1;color:#c4206f;font-weight:800;font-size:62px}
+  .name{margin-top:14px;color:#fff;font-weight:800;font-size:27px;text-shadow:0 3px 10px rgba(0,0,0,.35)}
+  .chip{white-space:nowrap;margin-top:12px;padding:9px 26px;border-radius:999px;font-size:23px;font-weight:600;text-align:center;line-height:1.35}
+  .chip.boss{background:linear-gradient(90deg,#ff3b3b,#ff6a3d);color:#fff;box-shadow:0 8px 20px rgba(255,59,59,.35)}
+  .chip.role{background:rgba(30,8,80,.72);border:2px solid #ffd23f;color:#fff}
+  .chip.extra{margin-top:10px;padding:7px 20px;font-size:19px;font-weight:700;background:#ffd23f;color:#3a0d86;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+  .line{position:absolute;background:#ffd23f;border-radius:3px}
+</style></head>
+<body>
+<div class="banner" id="b">
+  <div class="dots"></div>
+  <div class="evolve"><img src="evolve.png"></div>
+
+  <!-- Spin Master wordmark (recreated; swap for official artwork when available) -->
+  <svg class="sm-logo" width="230" height="92" viewBox="0 0 230 92">
+    <defs><linearGradient id="r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff2a2a"/><stop offset="1" stop-color="#d00000"/></linearGradient></defs>
+    <rect x="3" y="3" width="224" height="86" rx="43" fill="url(#r)" stroke="#fff" stroke-width="5"/>
+    <text x="115" y="43" text-anchor="middle" font-family="Inter" font-weight="900" font-size="31" fill="#fff" font-style="italic" letter-spacing="2">SPIN</text>
+    <text x="115" y="73" text-anchor="middle" font-family="Inter" font-weight="900" font-size="25" fill="#fff" font-style="italic" letter-spacing="2.5">MASTER</text>
+  </svg>
+
+  <h1>ORGANIGRAMA DE OPERACIONES</h1>
+  <div class="sub">EVOLVE-SPIN MASTER</div>
+
+  <!-- tree lines -->
+  <div class="line" style="left:869px;top:512px;width:5px;height:30px"></div>
+  <div class="line" style="left:471px;top:540px;width:801px;height:5px"></div>
+  <div class="line" style="left:471px;top:540px;width:5px;height:36px"></div>
+  <div class="line" style="left:1267px;top:540px;width:5px;height:36px"></div>
+
+  <div class="node" style="left:551px;top:238px">
+    <div class="ring boss"><div class="photo" style="background-image:url(said.png)"></div></div>
+    <div class="name">Said Zapién</div>
+    <div class="chip boss">Gerente de Cuenta</div>
+  </div>
+
+  <div class="node" style="left:153px;top:576px">
+    <div class="ring"><div class="photo initials">VO</div></div>
+    <div class="name">Verónica Ochoa Manzo</div>
+    <div class="chip role">Ejecutiva de Cuenta<br>Promotoría Fija y Temporal</div>
+  </div>
+
+  <div class="node" style="left:949px;top:576px">
+    <div class="ring"><div class="photo" style="background-image:url(alan.png)"></div></div>
+    <div class="name">Alan Obregón</div>
+    <div class="chip role">Ejecutivo de Cuenta<br>Activaciones PDV y Planes Impulsor de Venta</div>
+    <div class="chip extra">★ Soporte Estratégico de Gerencia</div>
+  </div>
+</div>
+<script>
+  // Toys around the edges, center kept clear for the tree.
+  const toys = [
+    ['🧸',40,150,120,-12],['🚀',250,60,96,18],['🎲',1500,40,90,-20],['🪀',1330,140,84,12],
+    ['🧩',30,470,104,10],['🚗',190,330,92,-8],['🤖',1560,300,118,8],['🦖',1400,470,110,-10],
+    ['🎈',50,780,110,-6],['🎨',1600,700,96,-14],
+    ['⭐',420,70,60,0],['⭐',1210,60,54,0],['🎠',1625,120,90,6],['🛹',20,300,80,-25],
+    ['🥁',1640,520,80,10],['🎁',90,620,78,-10],['🚂',760,800,76,0],['🪁',700,600,62,14],
+    ['🏎️',930,880,66,0],['🧸',1020,620,58,8],['🎮',1640,880,74,-12],['🛸',1080,30,70,10],['🧱',40,900,64,10]
+  ];
+  const b = document.getElementById('b');
+  toys.forEach(([e,x,y,s,r]) => { const d=document.createElement('div'); d.className='toy'; d.textContent=e;
+    d.style.cssText+=`left:${x}px;top:${y}px;font-size:${s}px;transform:rotate(${r}deg)`; b.insertBefore(d,b.children[1]); });
+  const colors=['#ffd23f','#ff4f8b','#2ec4ff','#7cf27a','#ff8a3d','#ffffff'];
+  let seed=7; const rnd=()=>((seed=(seed*16807)%2147483647)/2147483647);
+  for(let i=0;i<70;i++){ const x=rnd()*1743, y=rnd()*983;
+    if (x>130 && x<1610 && y>110 && y<980) continue;
+    const c=document.createElement('div'); c.className='conf';
+    c.style.cssText+=`left:${x}px;top:${y}px;width:${8+rnd()*10}px;height:${8+rnd()*10}px;background:${colors[i%6]};transform:rotate(${rnd()*90}deg);border-radius:${i%3?'4px':'50%'}`;
+    b.insertBefore(c,b.children[1]); }
+</script>
+</body></html>
