@@ -1,6 +1,7 @@
 const { getPool } = require('./_db');
 const { getSession } = require('./_auth');
 const { ensureFilesTable, newFileId, insertFile, extractInlineFiles } = require('./_files');
+const { hasRun, runVeronicaCleanup, scrubStaleCopy } = require('./_cleanup');
 
 const ROW_ID = 'default';
 
@@ -29,13 +30,17 @@ function blobHasInlineFiles(data) {
   return JSON.stringify(data.scores || {}).includes('"dataUrl":"');
 }
 
-async function moveInlineFilesOut(db) {
+// One-time upkeep on the stored row (moving inline files out, the
+// 2026-10-13 test-data cleanup), done under the row lock.
+async function prepareRow(db) {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
     const { rows } = await client.query('select data from kpi_repo_state where id = $1 for update', [ROW_ID]);
     const data = rows[0].data;
-    if (await extractInlineFiles(client, data)) await saveRow(client, data);
+    const cleaned = await runVeronicaCleanup(client, data);
+    const moved = await extractInlineFiles(client, data);
+    if (cleaned || moved) await saveRow(client, data);
     await client.query('COMMIT');
     return data;
   } catch (err) {
@@ -231,7 +236,7 @@ module.exports = async (req, res) => {
         res.status(200).json({ data: null });
         return;
       }
-      if (blobHasInlineFiles(data)) data = await moveInlineFilesOut(db);
+      if (blobHasInlineFiles(data) || !hasRun(data)) data = await prepareRow(db);
       res.status(200).json({
         data: session.role === 'admin' ? data : filterForExec(data, session.execId)
       });
@@ -252,7 +257,11 @@ module.exports = async (req, res) => {
           await client.query('BEGIN');
           const { rows } = await client.query('select data from kpi_repo_state where id = $1 for update', [ROW_ID]);
           const current = rows[0] ? rows[0].data : null;
-          if (current) await extractInlineFiles(client, current);
+          if (current) {
+            await runVeronicaCleanup(client, current);
+            await extractInlineFiles(client, current);
+            scrubStaleCopy(data, current);
+          }
           const merged = mergeExecOwned(data, current);
           await extractInlineFiles(client, merged);
           await saveRow(client, merged);
@@ -292,6 +301,7 @@ module.exports = async (req, res) => {
           throw new HttpError(404, 'Sin datos');
         }
 
+        await runVeronicaCleanup(client, data);
         await extractInlineFiles(client, data);
         await applyExecAction(client, data, execId, action);
 
