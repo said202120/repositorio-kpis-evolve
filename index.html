@@ -498,6 +498,17 @@
                           <div style="font-size:11px;font-weight:700;color:{{brand.accent}}">{{ kpi.attachmentCountLabel }}</div>
                         </sc-if>
                       </div>
+                      <sc-if value="{{kpi.hasDeadlines}}" hint-placeholder-val="{{false}}">
+                        <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px;background:oklch(0.985 0.004 255);border:1px solid oklch(0.93 0.01 255);border-radius:9px;padding:8px 10px">
+                          <div style="font-size:10.5px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px">Fechas de entrega del mes</div>
+                          <sc-for list="{{kpi.deadlines}}" as="dl" hint-placeholder-count="3">
+                            <div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px">
+                              <span style="color:oklch(0.4 0.02 255)">{{ dl.label }}</span>
+                              <span style="font-weight:700;color:{{dl.color}}">{{ dl.statusText }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
                       <sc-if value="{{kpi.hasAttachments}}" hint-placeholder-val="{{false}}">
                         <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
                           <sc-for list="{{kpi.attachments}}" as="file" hint-placeholder-count="2">
@@ -506,6 +517,9 @@
                               <div style="flex:1;min-width:0">
                                 <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="display:block;color:{{brand.accent}};font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
                                 <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
+                                <sc-if value="{{file.hasTiming}}" hint-placeholder-val="{{false}}">
+                                  <div style="font-size:11px;font-weight:700;color:{{file.timingColor}};margin-top:2px">{{ file.timingText }}</div>
+                                </sc-if>
                               </div>
                               <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
                               <button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
@@ -539,6 +553,17 @@
                           <div style="font-size:11px;font-weight:700;color:{{brand.accent}}">{{ kpi.attachmentCountLabel }}</div>
                         </sc-if>
                       </div>
+                      <sc-if value="{{kpi.hasDeadlines}}" hint-placeholder-val="{{false}}">
+                        <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px;background:oklch(0.985 0.004 255);border:1px solid oklch(0.93 0.01 255);border-radius:9px;padding:8px 10px">
+                          <div style="font-size:10.5px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px">Fechas de entrega del mes</div>
+                          <sc-for list="{{kpi.deadlines}}" as="dl" hint-placeholder-count="3">
+                            <div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px">
+                              <span style="color:oklch(0.4 0.02 255)">{{ dl.label }}</span>
+                              <span style="font-weight:700;color:{{dl.color}}">{{ dl.statusText }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
                       <sc-if value="{{kpi.hasAttachments}}" hint-placeholder-val="{{false}}">
                         <div style="display:flex;flex-direction:column;gap:6px">
                           <sc-for list="{{kpi.attachments}}" as="file" hint-placeholder-count="2">
@@ -547,6 +572,9 @@
                               <div style="flex:1;min-width:0">
                                 <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="display:block;color:{{brand.accent}};font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
                                 <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
+                                <sc-if value="{{file.hasTiming}}" hint-placeholder-val="{{false}}">
+                                  <div style="font-size:11px;font-weight:700;color:{{file.timingColor}};margin-top:2px">{{ file.timingText }}</div>
+                                </sc-if>
                               </div>
                               <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
                               <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="flex:none;font-size:11px;font-weight:700;color:white;background:{{brand.accent}};padding:4px 9px;border-radius:7px;text-decoration:none">Descargar</a>
@@ -734,6 +762,119 @@ function migrateToSpinMasterData(data){
   return changed;
 }
 // END MIGRATION
+
+// BEGIN DEADLINES (pure; tested in isolation)
+// Delivery deadlines per KPI, derived from the calendar of the month being
+// graded, and a comparison against the date each support file was uploaded.
+// Everything is computed in Mexico City time as whole calendar days.
+const MX_TZ = 'America/Mexico_City';
+const MX_HOLIDAYS = ['2026-01-01','2026-02-02','2026-03-16','2026-05-01','2026-09-16','2026-11-16','2026-12-25'];
+const DOW_ES = ['dom','lun','mar','mié','jue','vie','sáb'];
+const MON_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+// Deadline rules for the Spin Master KPIs, matched by exact KPI name so a KPI
+// the manager later renames or redefines is not given a stale rule. A KPI may
+// also carry its own `due` object, which wins over this table.
+//   weekly        {weekday: 0-6}                every such weekday of the month
+//   monthDay      {day, businessDays?}          Nth calendar day / Nth business day
+//   monthDays     {days: [15, 'end']}           several days of the month
+//   beforeMonthEnd{businessDays: n}             n business days before the last business day
+const SPIN_DEADLINES = {
+  veronica: {
+    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, businessDays:true },
+    'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
+    'Envío de Maestro y Plan de Trabajo actualizado (semanal)': { type:'weekly', weekday:1 },
+    'Reporte a semana vencida (cobertura Emetrix e incidencias)': { type:'weekly', weekday:1 },
+    'Entrega de iniciativas Evolve (adicionales a los sondeos de Emetrix)': { type:'monthDay', day:8 },
+    'Salida a campo mensual': { type:'monthDays', days:[15, 'end'] },
+    'Comprobación de gastos': { type:'beforeMonthEnd', businessDays:4 }
+  },
+  edgar: {
+    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, businessDays:true },
+    'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
+    'Envío de información de activación (domingos)': { type:'weekly', weekday:0 },
+    'Salida de campo y hallazgos (reporte)': { type:'monthDay', day:5 }
+  }
+};
+function deadlineRuleFor(execId, kpi){
+  if (!kpi) return null;
+  if (kpi.due && typeof kpi.due === 'object') return kpi.due;
+  const table = SPIN_DEADLINES[execId];
+  return (table && table[kpi.name]) || null;
+}
+
+function ymdToNum(ymd){ const p = ymd.split('-').map(Number); return Math.floor(Date.UTC(p[0], p[1] - 1, p[2]) / 86400000); }
+function numToYmd(n){ return new Date(n * 86400000).toISOString().slice(0, 10); }
+function dowOfNum(n){ return (((n + 4) % 7) + 7) % 7; } // epoch day 0 was a Thursday
+function mxDayNum(ts){
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: MX_TZ, year:'numeric', month:'2-digit', day:'2-digit' })
+    .formatToParts(new Date(ts)).reduce((o, x) => { o[x.type] = x.value; return o; }, {});
+  return ymdToNum(`${p.year}-${p.month}-${p.day}`);
+}
+function isBizDay(n){ const d = dowOfNum(n); return d !== 0 && d !== 6 && !MX_HOLIDAYS.includes(numToYmd(n)); }
+function dayLabel(n){ return `${DOW_ES[dowOfNum(n)]} ${parseInt(numToYmd(n).slice(8), 10)} ${MON_ES[parseInt(numToYmd(n).slice(5, 7), 10) - 1]}`; }
+
+function deadlineDayNums(due, ym){
+  if (!due || !/^\d{4}-\d{2}$/.test(ym || '')) return [];
+  const [y, m] = ym.split('-').map(Number);
+  const first = Math.floor(Date.UTC(y, m - 1, 1) / 86400000);
+  const last = Math.floor(Date.UTC(y, m, 0) / 86400000);
+  const nthBiz = k => { let c = 0; for (let n = first; n <= last; n++) { if (isBizDay(n) && ++c === k) return n; } return null; };
+  const out = [];
+  if (due.type === 'weekly') {
+    for (let n = first; n <= last; n++) if (dowOfNum(n) === due.weekday) out.push(n);
+  } else if (due.type === 'monthDay') {
+    const n = due.businessDays ? nthBiz(due.day) : Math.min(first + due.day - 1, last);
+    if (n !== null) out.push(n);
+  } else if (due.type === 'monthDays') {
+    (due.days || []).forEach(d => out.push(d === 'end' ? last : Math.min(first + d - 1, last)));
+  } else if (due.type === 'beforeMonthEnd') {
+    let n = last; while (n > first && !isBizDay(n)) n--;
+    let back = due.businessDays || 0;
+    while (back > 0 && n > first) { n--; if (isBizDay(n)) back--; }
+    out.push(n);
+  }
+  return Array.from(new Set(out)).sort((a, b) => a - b);
+}
+
+// uploadTimestamps: one entry per file (a number, or null when the file has no
+// recorded upload date). Each dated file is paired, in upload order, with the
+// still-unfilled deadline closest to it in time (ties go to the earlier one);
+// extra files beyond the number of deadlines get no verdict.
+function evaluateDelivery(due, ym, uploadTimestamps, nowTs){
+  const nums = deadlineDayNums(due, ym);
+  if (!nums.length) return null;
+  const today = mxDayNum(nowTs);
+  const deadlines = nums.map(n => ({ dayNum: n, fileIdx: null, daysLate: 0, status: null }));
+  const dated = [];
+  let undated = false;
+  (uploadTimestamps || []).forEach((ts, idx) => {
+    if (typeof ts === 'number' && isFinite(ts)) dated.push({ idx, day: mxDayNum(ts), ts });
+    else undated = true;
+  });
+  dated.sort((a, b) => a.ts - b.ts);
+  const files = {};
+  dated.forEach(f => {
+    let best = null;
+    deadlines.forEach(d => {
+      if (d.fileIdx !== null) return;
+      const dist = Math.abs(f.day - d.dayNum);
+      if (best === null || dist < Math.abs(f.day - best.dayNum)) best = d;
+    });
+    if (!best) return;
+    best.fileIdx = f.idx;
+    best.daysLate = Math.max(0, f.day - best.dayNum);
+    best.status = best.daysLate > 0 ? 'late' : 'ontime';
+    files[f.idx] = { status: best.status, daysLate: best.daysLate, dayNum: best.dayNum };
+  });
+  deadlines.forEach(d => {
+    if (d.status) return;
+    d.status = undated ? 'unknown' : (today > d.dayNum ? 'missed' : 'pending');
+    if (d.status === 'missed') d.daysLate = today - d.dayNum;
+  });
+  return { deadlines, files, today };
+}
+// END DEADLINES
 
 function buildKpiList(defs){
   return defs.map(d => ({ id: d.id, name: d.name, desc: d.desc, considerations: d.considerations, weight: d.weight, effectiveFrom: d.effectiveFrom || null, okr: d.okr || null }));
@@ -1547,19 +1688,41 @@ class Component extends DCLogic {
           if (score !== null && score !== undefined) earned += k.weight * (score/100);
           const kstatus = this.statusFor(score);
           const editable = isManagerEditable;
-          const attachmentsList = (rec.attachments || (rec.attachment ? [rec.attachment] : [])).map(a => ({
+          const rawAttachments = rec.attachments || (rec.attachment ? [rec.attachment] : []);
+          const dueRule = deadlineRuleFor(exec.id, k);
+          const delivery = dueRule ? evaluateDelivery(dueRule, s.selectedMonth, rawAttachments.map(a => a && a.uploadedAt), Date.now()) : null;
+          const TIMING_COLORS = { ontime: 'oklch(0.48 0.14 150)', late: 'oklch(0.55 0.15 60)', missed: 'oklch(0.5 0.17 25)', pending: 'oklch(0.55 0.02 255)', unknown: 'oklch(0.55 0.02 255)' };
+          const daysText = n => n === 1 ? '1 día de retraso' : `${n} días de retraso`;
+          const deadlineRows = delivery ? delivery.deadlines.map(d => {
+            let statusText;
+            if (d.status === 'ontime') statusText = '✓ Entregado a tiempo';
+            else if (d.status === 'late') statusText = `⚠ Entregado con ${daysText(d.daysLate)}`;
+            else if (d.status === 'missed') statusText = `✕ Sin entrega · venció hace ${d.daysLate === 1 ? '1 día' : d.daysLate + ' días'}`;
+            else if (d.status === 'unknown') statusText = 'Sin fecha de carga registrada';
+            else statusText = d.dayNum === delivery.today ? '⏳ Vence hoy' : '⏳ Pendiente';
+            return { label: dayLabel(d.dayNum), statusText, color: TIMING_COLORS[d.status] };
+          }) : [];
+          const attachmentsList = rawAttachments.map((a, idx) => {
+            const t = delivery && delivery.files[idx];
+            return {
             ...a,
+            hasTiming: !!t,
+            timingText: t ? (t.status === 'late' ? `⚠ ${daysText(t.daysLate)} (límite ${dayLabel(t.dayNum)})` : `✓ A tiempo (límite ${dayLabel(t.dayNum)})`) : '',
+            timingColor: t ? TIMING_COLORS[t.status] : '',
             // Files live in their own table now; a freshly uploaded one is
             // still in memory as a data URL until the next reload.
             downloadUrl: a.dataUrl || ('/api/file?id=' + encodeURIComponent(a.id || '')),
             sizeDisplay: fmtBytes(a.size),
             uploadedDisplay: fmtUploaded(a.uploadedAt),
             onRemove: () => this.removeKpiFile(exec.id, s.selectedMonth, k.id, a.id)
-          }));
-          const review = REVIEW_STATUS[(rec.review && rec.review.status) || ''] || null;
+            };
+          });
+          const review =REVIEW_STATUS[(rec.review && rec.review.status) || ''] || null;
           return {
             id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight, icon: this.kpiIcon(k.name),
             okr: k.okr || null,
+            hasDeadlines: deadlineRows.length > 0,
+            deadlines: deadlineRows,
             hasReview: !!review,
             reviewLabel: review ? review.label : '',
             reviewColor: review ? review.color : '',
