@@ -838,14 +838,26 @@ function deadlineDayNums(due, ym){
 }
 
 // uploadTimestamps: one entry per file (a number, or null when the file has no
-// recorded upload date). Each dated file is paired, in upload order, with the
-// still-unfilled deadline closest to it in time (ties go to the earlier one);
-// extra files beyond the number of deadlines get no verdict.
+// recorded upload date). Every deadline owns a window of days and a file only
+// counts for the deadline whose window contains its upload day, so an upload
+// made days before a deadline never settles it:
+//   weekly          window = from the day before the deadline until the day before
+//                   the next window starts (a Sunday upload still counts for Monday)
+//   everything else window = from the day after the previous deadline (the first
+//                   one from the 1st of the month) onwards
+// The first file inside a window settles it; later ones get no verdict.
 function evaluateDelivery(due, ym, uploadTimestamps, nowTs){
   const nums = deadlineDayNums(due, ym);
   if (!nums.length) return null;
   const today = mxDayNum(nowTs);
-  const deadlines = nums.map(n => ({ dayNum: n, fileIdx: null, daysLate: 0, status: null }));
+  const [y, m] = ym.split('-').map(Number);
+  const monthFirst = Math.floor(Date.UTC(y, m - 1, 1) / 86400000);
+  const weekly = due.type === 'weekly';
+  const deadlines = nums.map((n, k) => ({
+    dayNum: n, fileIdx: null, daysLate: 0, status: null,
+    start: k === 0 ? monthFirst : (weekly ? n - 1 : nums[k - 1] + 1)
+  }));
+  deadlines.forEach((d, k) => { d.end = k + 1 < deadlines.length ? deadlines[k + 1].start - 1 : Infinity; });
   const dated = [];
   let undated = false;
   (uploadTimestamps || []).forEach((ts, idx) => {
@@ -855,17 +867,12 @@ function evaluateDelivery(due, ym, uploadTimestamps, nowTs){
   dated.sort((a, b) => a.ts - b.ts);
   const files = {};
   dated.forEach(f => {
-    let best = null;
-    deadlines.forEach(d => {
-      if (d.fileIdx !== null) return;
-      const dist = Math.abs(f.day - d.dayNum);
-      if (best === null || dist < Math.abs(f.day - best.dayNum)) best = d;
-    });
-    if (!best) return;
-    best.fileIdx = f.idx;
-    best.daysLate = Math.max(0, f.day - best.dayNum);
-    best.status = best.daysLate > 0 ? 'late' : 'ontime';
-    files[f.idx] = { status: best.status, daysLate: best.daysLate, dayNum: best.dayNum };
+    const d = deadlines.find(x => f.day >= x.start && f.day <= x.end);
+    if (!d || d.fileIdx !== null) return;
+    d.fileIdx = f.idx;
+    d.daysLate = Math.max(0, f.day - d.dayNum);
+    d.status = d.daysLate > 0 ? 'late' : 'ontime';
+    files[f.idx] = { status: d.status, daysLate: d.daysLate, dayNum: d.dayNum };
   });
   deadlines.forEach(d => {
     if (d.status) return;
@@ -1697,9 +1704,9 @@ class Component extends DCLogic {
             let statusText;
             if (d.status === 'ontime') statusText = '✓ Entregado a tiempo';
             else if (d.status === 'late') statusText = `⚠ Entregado con ${daysText(d.daysLate)}`;
-            else if (d.status === 'missed') statusText = `✕ Sin entrega · venció hace ${d.daysLate === 1 ? '1 día' : d.daysLate + ' días'}`;
+            else if (d.status === 'missed') statusText = `✕ Sin cargar · ${daysText(d.daysLate)}`;
             else if (d.status === 'unknown') statusText = 'Sin fecha de carga registrada';
-            else statusText = d.dayNum === delivery.today ? '⏳ Vence hoy' : '⏳ Pendiente';
+            else statusText = d.dayNum === delivery.today ? '⏳ Pendiente de carga · vence hoy' : '⏳ Pendiente de carga';
             return { label: dayLabel(d.dayNum), statusText, color: TIMING_COLORS[d.status] };
           }) : [];
           const attachmentsList = rawAttachments.map((a, idx) => {
