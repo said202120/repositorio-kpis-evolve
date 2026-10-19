@@ -503,7 +503,10 @@
                           <sc-for list="{{kpi.attachments}}" as="file" hint-placeholder-count="2">
                             <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px">
                               <span>📎</span>
-                              <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                              <div style="flex:1;min-width:0">
+                                <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="display:block;color:{{brand.accent}};font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                                <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
+                              </div>
                               <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
                               <button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
                             </div>
@@ -541,7 +544,10 @@
                           <sc-for list="{{kpi.attachments}}" as="file" hint-placeholder-count="2">
                             <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:8px 10px;font-size:12px">
                               <span>📎</span>
-                              <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="color:{{brand.accent}};font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                              <div style="flex:1;min-width:0">
+                                <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="display:block;color:{{brand.accent}};font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                                <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
+                              </div>
                               <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
                               <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="flex:none;font-size:11px;font-weight:700;color:white;background:{{brand.accent}};padding:4px 9px;border-radius:7px;text-decoration:none">Descargar</a>
                             </div>
@@ -1436,6 +1442,22 @@ class Component extends DCLogic {
     const monthLabelOf = v => (MONTHS.find(m => m.value === v) || {}).label || v;
     const fmtMoney = n => '$' + Math.round(n).toLocaleString('es-MX');
     const fmtBytes = n => (n === null || n === undefined) ? '' : n < 1024*1024 ? Math.round(n/1024) + ' KB' : (n/(1024*1024)).toFixed(1) + ' MB';
+    // Upload moment shown in Mexico City time so every viewer reads the same
+    // day/hour regardless of their device's timezone (deadline tracking).
+    const fmtUploaded = ts => {
+      if (typeof ts !== 'number' || !isFinite(ts)) return 'Fecha de carga no disponible';
+      try {
+        const parts = new Intl.DateTimeFormat('es-MX', {
+          timeZone: 'America/Mexico_City', weekday: 'short', day: 'numeric', month: 'short',
+          year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+        }).formatToParts(new Date(ts)).reduce((o, p) => { o[p.type] = p.value; return o; }, {});
+        const wd = String(parts.weekday || '').replace('.', '');
+        const mon = String(parts.month || '').replace('.', '');
+        return `Cargado: ${wd} ${parts.day} ${mon} ${parts.year} · ${parts.hour}:${parts.minute}`;
+      } catch(e) {
+        return 'Fecha de carga no disponible';
+      }
+    };
 
     const isAdminSession = !!(s.session && s.session.role === 'admin');
     const isExecSession = !!(s.session && s.session.role === 'ejecutivo');
@@ -1531,6 +1553,7 @@ class Component extends DCLogic {
             // still in memory as a data URL until the next reload.
             downloadUrl: a.dataUrl || ('/api/file?id=' + encodeURIComponent(a.id || '')),
             sizeDisplay: fmtBytes(a.size),
+            uploadedDisplay: fmtUploaded(a.uploadedAt),
             onRemove: () => this.removeKpiFile(exec.id, s.selectedMonth, k.id, a.id)
           }));
           const review = REVIEW_STATUS[(rec.review && rec.review.status) || ''] || null;
