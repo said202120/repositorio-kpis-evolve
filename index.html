@@ -836,7 +836,7 @@ const MON_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov
 // being graded ("a mes vencido"): grading October, the deadline falls in November.
 const SPIN_DEADLINES = {
   veronica: {
-    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, businessDays:true, monthOffset:1 },
+    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, monthOffset:1 },
     'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
     'Envío de Maestro y Plan de Trabajo actualizado (semanal)': { type:'weekly', weekday:1 },
     'Reporte a semana vencida (cobertura Emetrix e incidencias)': { type:'weekly', weekday:1 },
@@ -845,7 +845,7 @@ const SPIN_DEADLINES = {
     'Comprobación de gastos': { type:'beforeMonthEnd', businessDays:4 }
   },
   daniel: {
-    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, businessDays:true, monthOffset:1 },
+    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, monthOffset:1 },
     'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
     'Envío de información de activación (domingos)': { type:'weekly', weekday:0 },
     'Salida de campo y hallazgos (reporte)': { type:'monthDay', day:5 }
