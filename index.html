@@ -236,8 +236,8 @@
         <div style="margin-top:32px;background:white;border-radius:20px;padding:26px;border:1px solid oklch(0.91 0.01 255)" data-no-print>
           <div style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;margin-bottom:18px">Organigrama de Operaciones</div>
           <div style="display:flex;gap:20px;flex-wrap:wrap">
-            <a href="assets/organigrama-spin-master.jpg" target="_blank" style="flex:1;min-width:280px;max-width:640px;display:block;text-decoration:none">
-              <img src="assets/organigrama-spin-master.jpg" alt="Organigrama Evolve-Spin Master" style="width:100%;border-radius:14px;display:block;border:1px solid oklch(0.91 0.01 255)"/>
+            <a href="assets/organigrama-spin-master-v2.jpg" target="_blank" style="flex:1;min-width:280px;max-width:640px;display:block;text-decoration:none">
+              <img src="assets/organigrama-spin-master-v2.jpg" alt="Organigrama Evolve-Spin Master" style="width:100%;border-radius:14px;display:block;border:1px solid oklch(0.91 0.01 255)"/>
             </a>
             <a href="assets/organigrama-gifan.jpg" target="_blank" style="flex:1;min-width:280px;max-width:640px;display:block;text-decoration:none">
               <img src="assets/organigrama-gifan.jpg" alt="Organigrama Evolve-Gifan" style="width:100%;border-radius:14px;display:block;border:1px solid oklch(0.91 0.01 255)"/>
@@ -788,6 +788,26 @@ function migrateDanielReplacesAlanData(data){
   });
   return true;
 }
+
+// What each executive does, shown under their name on cards and in the detail
+// header. roleLabel is not editable in the UI, so this simply keeps stored
+// data aligned with the list; it reports a change only when a label differs.
+const ROLE_LABELS = {
+  veronica: 'Ejecutiva de Cuenta · Promotoría Fija y Temporal',
+  daniel: 'Ejecutivo de Cuenta · Activaciones / Impulsores Punto de Venta',
+  marifer: 'Ejecutiva de Cuenta · Promotoría Fija'
+};
+function migrateRoleLabelsData(data){
+  if (!data || !Array.isArray(data.executives)) return false;
+  let changed = false;
+  data.executives.forEach(e => {
+    if (e && !e.archived && ROLE_LABELS[e.id] && e.roleLabel !== ROLE_LABELS[e.id]) {
+      e.roleLabel = ROLE_LABELS[e.id];
+      changed = true;
+    }
+  });
+  return changed;
+}
 // END MIGRATION
 
 // BEGIN DEADLINES (pure; tested in isolation)
@@ -1065,7 +1085,7 @@ class Component extends DCLogic {
           // Admin sessions bring the stored data up to date (team change)
           // before it is shown, and persist it only if something changed.
           const migrated = session.role === 'admin'
-            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data)].some(Boolean)
+            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data), migrateRoleLabelsData(payload.data)].some(Boolean)
             : false;
           this.setState({ data: payload.data });
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(payload.data))); } catch(e) {}
@@ -1208,15 +1228,15 @@ class Component extends DCLogic {
 
   buildDefaultData(){
     const veronica = {
-      id:'veronica', name:'Verónica Ochoa Manzo', roleLabel:'Ejecutivo de Cuenta · Spin Master', client:'SPIN MASTER', photoUrl:'assets/veronica-ochoa-manzo.jpg',
+      id:'veronica', name:'Verónica Ochoa Manzo', roleLabel:ROLE_LABELS.veronica, client:'SPIN MASTER', photoUrl:'assets/veronica-ochoa-manzo.jpg',
       categories: veronicaSpinCategories()
     };
     const daniel = {
-      id:'daniel', name:'Daniel Mena', roleLabel:'Ejecutivo de Cuenta · Spin Master', client:'SPIN MASTER', photoUrl:'assets/daniel-mena.jpg',
+      id:'daniel', name:'Daniel Mena', roleLabel:ROLE_LABELS.daniel, client:'SPIN MASTER', photoUrl:'assets/daniel-mena.jpg',
       categories: alanSpinCategories()
     };
     const marifer = {
-      id:'marifer', name:'María Fernanda Quintanar', roleLabel:'Ejecutivo de Cuenta · Gifan', client:'GIFAN',
+      id:'marifer', name:'María Fernanda Quintanar', roleLabel:ROLE_LABELS.marifer, client:'GIFAN',
       categories: [
         { id:'gestion', name:'Gestión del personal y reporteo', kpis: buildKpiList([
           {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 90% de días efectivos al mes.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
