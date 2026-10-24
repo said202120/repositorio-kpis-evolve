@@ -15,6 +15,6 @@ insert into kpi_repo_users (username, password_hash, role, exec_id) values
   ('said', '$2a$10$TZKc6K7dYU0D9YWZvwReG.9MjXkAtp0z3IGHhf4BHuZZ0xALce5Iq', 'admin', null),
   ('director', '$2a$10$KSAUxGZdThC63ffOzn/03Oil1BuvX7TsSJNfrb4Wp176qra25ofhW', 'admin', null),
   ('veronica', '$2b$10$bD0kyp.1Z8QqTn2uEfms2uDNCttkOQi8F/ez1ayU7SCj4BQyIeF9i', 'ejecutivo', 'veronica'),
-  ('edgar', '$2a$10$wRJScz3QjmarACA2Plh0O.1I4X9UC2h2Ah6QSAZhCk7zUkNgXBh/O', 'ejecutivo', 'edgar'),
+  ('daniele', '$2a$10$y2a3AuWR99P7OGnal597te84oO2LIpxn7v3hCCFDV51MRz6TCeHi6', 'ejecutivo', 'daniel'),
   ('marifer', '$2a$10$Oj09CLeh7a1SRYF6ATCFIem0RenRH0J1ezPp9WSKQ3yYkLshLJpp6', 'ejecutivo', 'marifer')
 on conflict (username) do update set password_hash = excluded.password_hash, role = excluded.role, exec_id = excluded.exec_id;

@@ -761,6 +761,33 @@ function migrateToSpinMasterData(data){
 
   return changed;
 }
+
+// Alan Obregón (id 'edgar') resigned and Daniel Mena returns to the same
+// post. Daniel gets a copy of Alan's current KPI set; Alan's record stays in
+// the data, archived and moved to the end, so his history is kept. Daniel
+// starts with empty collections. Idempotent: once 'daniel' exists, or when
+// there is no active 'edgar' to replace, nothing happens.
+const DANIEL_PHOTO = 'assets/daniel-mena.jpg';
+function migrateDanielReplacesAlanData(data){
+  if (!data || !Array.isArray(data.executives)) return false;
+  const aIdx = data.executives.findIndex(e => e && e.id === 'edgar' && !e.archived);
+  if (aIdx === -1 || data.executives.some(e => e && e.id === 'daniel')) return false;
+  const alan = data.executives[aIdx];
+  const daniel = JSON.parse(JSON.stringify(alan));
+  delete daniel.archived;
+  Object.assign(daniel, {
+    id: 'daniel', name: 'Daniel Mena', roleLabel: SPIN_MASTER_ROLE_LABEL,
+    client: 'SPIN MASTER', photoUrl: DANIEL_PHOTO
+  });
+  data.executives[aIdx] = daniel;
+  alan.archived = true;
+  data.executives.push(alan);
+  ['scores', 'midReviews', 'plans', 'acks', 'variableAdjustments', 'monthlyVariables'].forEach(field => {
+    if (!data[field] || typeof data[field] !== 'object') data[field] = {};
+    if (!data[field].daniel) data[field].daniel = {};
+  });
+  return true;
+}
 // END MIGRATION
 
 // BEGIN DEADLINES (pure; tested in isolation)
@@ -789,13 +816,14 @@ const SPIN_DEADLINES = {
     'Salida a campo mensual': { type:'monthDays', days:[15, 'end'] },
     'Comprobación de gastos': { type:'beforeMonthEnd', businessDays:4 }
   },
-  edgar: {
+  daniel: {
     'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, businessDays:true },
     'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
     'Envío de información de activación (domingos)': { type:'weekly', weekday:0 },
     'Salida de campo y hallazgos (reporte)': { type:'monthDay', day:5 }
   }
 };
+SPIN_DEADLINES.edgar = SPIN_DEADLINES.daniel; // Alan's archived record keeps the same rules
 function deadlineRuleFor(execId, kpi){
   if (!kpi) return null;
   if (kpi.due && typeof kpi.due === 'object') return kpi.due;
@@ -1037,7 +1065,7 @@ class Component extends DCLogic {
           // Admin sessions bring the stored data up to date (team change)
           // before it is shown, and persist it only if something changed.
           const migrated = session.role === 'admin'
-            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data)].some(Boolean)
+            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data)].some(Boolean)
             : false;
           this.setState({ data: payload.data });
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(payload.data))); } catch(e) {}
@@ -1183,8 +1211,8 @@ class Component extends DCLogic {
       id:'veronica', name:'Verónica Ochoa Manzo', roleLabel:'Ejecutivo de Cuenta · Spin Master', client:'SPIN MASTER', photoUrl:'assets/veronica-ochoa-manzo.jpg',
       categories: veronicaSpinCategories()
     };
-    const edgar = {
-      id:'edgar', name:'Edgar Alan Obregón García', roleLabel:'Ejecutivo de Cuenta · Spin Master', client:'SPIN MASTER',
+    const daniel = {
+      id:'daniel', name:'Daniel Mena', roleLabel:'Ejecutivo de Cuenta · Spin Master', client:'SPIN MASTER', photoUrl:'assets/daniel-mena.jpg',
       categories: alanSpinCategories()
     };
     const marifer = {
@@ -1209,7 +1237,7 @@ class Component extends DCLogic {
       ]
     };
 
-    const execs = [veronica, edgar, marifer];
+    const execs = [veronica, daniel, marifer];
     const scores = {}, midReviews = {}, plans = {}, acks = {}, monthlyVariables = {};
     execs.forEach(ex => {
       const kpiIds = [];
