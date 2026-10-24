@@ -341,6 +341,23 @@
           </div>
         </div>
 
+        <sc-if value="{{detail.monthNote.editable}}" hint-placeholder-val="{{false}}">
+          <div data-no-print style="background:white;border:1px solid oklch(0.91 0.01 255);border-radius:14px;padding:16px 18px;margin-bottom:20px">
+            <div style="font-family:Sora,sans-serif;font-weight:700;font-size:14.5px;margin-bottom:8px">Retroalimentación general del mes</div>
+            <textarea placeholder="Escribe aquí tu retroalimentación del cierre de mes, en general (no por KPI)…" value="{{detail.monthNote.text}}" onChange="{{detail.monthNote.onChange}}" style="width:100%;border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:9px 11px;font-family:Inter,sans-serif;font-size:12.5px;resize:vertical;min-height:70px"></textarea>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap">
+              <button onClick="{{detail.monthNote.onNotify}}" disabled="{{detail.monthNote.notifyDisabled}}" style="border:none;background:{{brand.accent}};color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">{{ detail.monthNote.notifyLabel }}</button>
+              <div style="font-size:11px;color:oklch(0.55 0.02 255)">Se guarda sola. El correo avisa que hay retroalimentación; el ejecutivo la lee dentro del repositorio.</div>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{detail.monthNote.showForExec}}" hint-placeholder-val="{{false}}">
+          <div style="background:white;border:1px solid oklch(0.91 0.01 255);border-radius:14px;padding:16px 18px;margin-bottom:20px">
+            <div style="font-family:Sora,sans-serif;font-weight:700;font-size:14.5px;margin-bottom:6px">Retroalimentación general del mes</div>
+            <div style="font-size:13px;color:oklch(0.4 0.02 255);line-height:1.55;white-space:pre-wrap">{{ detail.monthNote.text }}</div>
+          </div>
+        </sc-if>
+
         <sc-if value="{{detail.partialNote}}" hint-placeholder-val="{{false}}">
           <div style="font-size:13px;color:oklch(0.5 0.13 80);font-weight:600;background:oklch(0.96 0.05 85);padding:10px 14px;border-radius:11px;margin-bottom:20px">{{ detail.partialNote }}</div>
         </sc-if>
@@ -1688,6 +1705,15 @@ class Component extends DCLogic {
     this.saveData(data);
   }
 
+  setMonthNote(execId, month, text){
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data.monthNotes) data.monthNotes = {};
+    if (!data.monthNotes[execId]) data.monthNotes[execId] = {};
+    data.monthNotes[execId][month] = { text, at: Date.now() };
+    this.addLog(data, execId, month, 'Editó la retroalimentación general del mes');
+    this.saveData(data);
+  }
+
   addPlanItem(execId, month, text, due){
     if (!text || !text.trim()) return;
     const data = JSON.parse(JSON.stringify(this.state.data));
@@ -2045,6 +2071,17 @@ class Component extends DCLogic {
         }))
       };
 
+      const monthNoteText = (data.monthNotes && data.monthNotes[exec.id] && data.monthNotes[exec.id][s.selectedMonth] && data.monthNotes[exec.id][s.selectedMonth].text) || '';
+      const monthNote = {
+        text: monthNoteText,
+        editable: isManagerEditable,
+        showForExec: !isManagerEditable && !!monthNoteText,
+        onChange: e => this.setMonthNote(exec.id, s.selectedMonth, e.target.value),
+        notifyLabel: s.notifyBusy ? 'Enviando…' : (s.notifyConfirm === exec.id + '|' + s.selectedMonth ? 'Ya avisaste hace poco · clic para enviar otro' : '✉ Enviar por correo'),
+        notifyDisabled: s.notifyBusy,
+        onNotify: () => this.notifyExec(exec.id, s.selectedMonth)
+      };
+
       let partialNote = null;
       if (!totalNow.isComplete && !totalNow.isEmpty) partialNote = `Calificación en progreso: faltan ${totalNow.total - totalNow.filled} de ${totalNow.total} KPIs por calificar en ${monthLabelOf(s.selectedMonth)}.`;
       else if (totalNow.isEmpty && s.selectedMonth === CURRENT_MONTH) partialNote = isManagerEditable ? `Aún no calificas ${monthLabelOf(s.selectedMonth)}. Mueve los controles para comenzar.` : `Tu manager aún no ha calificado ${monthLabelOf(s.selectedMonth)}.`;
@@ -2080,7 +2117,7 @@ class Component extends DCLogic {
         editBtnBg: s.editingKpis ? accent : 'white',
         editBtnColor: s.editingKpis ? 'white' : 'oklch(0.4 0.02 255)',
         toggleEditKpis: () => this.setState({ editingKpis: !s.editingKpis }),
-        variable, midReview, plan, ack, logs: execLogs, hasLogs: execLogs.length > 0, noLogs: execLogs.length === 0,
+        variable, midReview, monthNote, plan, ack, logs: execLogs, hasLogs: execLogs.length > 0, noLogs: execLogs.length === 0,
         onExportCsv, onExportPdf,
         categories
       };
