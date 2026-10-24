@@ -323,6 +323,12 @@
               <sc-if value="{{detail.canManualSave}}" hint-placeholder-val="{{false}}">
                 <button onClick="{{detail.onManualSave}}" disabled="{{detail.saveButtonDisabled}}" style="border:none;background:{{brand.accent}};color:white;font-size:12px;font-weight:700;padding:7px 14px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">{{ detail.saveButtonLabel }}</button>
               </sc-if>
+              <sc-if value="{{detail.canNotify}}" hint-placeholder-val="{{false}}">
+                <div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px">
+                  <button onClick="{{detail.onNotify}}" disabled="{{detail.notifyDisabled}}" style="border:1px solid {{brand.accent}};background:white;color:{{brand.accent}};font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">{{ detail.notifyLabel }}</button>
+                  <div style="font-size:10.5px;color:oklch(0.55 0.02 255)">{{ detail.lastNoticeLabel }}</div>
+                </div>
+              </sc-if>
               <button onClick="{{detail.onExportCsv}}" style="border:1px solid oklch(0.85 0.02 255);background:white;color:oklch(0.4 0.02 255);font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Exportar Excel</button>
               <button onClick="{{detail.onExportPdf}}" style="border:1px solid oklch(0.85 0.02 255);background:white;color:oklch(0.4 0.02 255);font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:Inter,sans-serif">Exportar PDF</button>
             </div>
@@ -651,6 +657,12 @@
 
   <sc-if value="{{saveToastSaved}}" hint-placeholder-val="{{false}}">
     <div style="position:fixed;bottom:24px;right:24px;background:oklch(0.42 0.13 150);color:white;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,0.25);z-index:70;display:flex;align-items:center;gap:8px" data-no-print>✓ Guardado con éxito</div>
+  </sc-if>
+  <sc-if value="{{notifyToastOk}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;bottom:76px;right:24px;background:oklch(0.42 0.13 150);color:white;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,0.25);z-index:71;max-width:340px" data-no-print>✉ {{ notifyToastText }}</div>
+  </sc-if>
+  <sc-if value="{{notifyToastErr}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed;bottom:76px;right:24px;background:oklch(0.5 0.18 25);color:white;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,0.25);z-index:71;max-width:340px" data-no-print>⚠ {{ notifyToastText }}</div>
   </sc-if>
   <sc-if value="{{saveToastError}}" hint-placeholder-val="{{false}}">
     <div style="position:fixed;bottom:24px;right:24px;background:oklch(0.5 0.18 25);color:white;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,0.25);z-index:70;display:flex;align-items:center;gap:8px" data-no-print>⚠ No se pudo guardar. Revisa tu conexión e intenta de nuevo.</div>
@@ -1038,7 +1050,10 @@ class Component extends DCLogic {
     cpError: '',
     cpSuccess: '',
     cpSubmitting: false,
-    saveStatus: 'idle'
+    saveStatus: 'idle',
+    notifyBusy: false,
+    notifyConfirm: null,
+    notifyToast: null
   };
 
   constructor(props){
@@ -1225,6 +1240,57 @@ class Component extends DCLogic {
         this.setState({ saveStatus: 'idle' });
       }
     }, 4000);
+  }
+
+  // Emails the ejecutivo (server-side, /api/notify) that feedback is waiting for
+  // them. A second notice for the same month within an hour needs a second
+  // click so it is never sent by accident.
+  notifyExec(execId, month){
+    const s = this.state;
+    if (s.notifyBusy || !s.data) return;
+    const key = execId + '|' + month;
+    const last = s.data.notices && s.data.notices[execId] && s.data.notices[execId][month];
+    if (last && Date.now() - last.sentAt < 3600000 && s.notifyConfirm !== key) {
+      this.setState({ notifyConfirm: key });
+      setTimeout(() => { if (this.state.notifyConfirm === key) this.setState({ notifyConfirm: null }); }, 6000);
+      return;
+    }
+    const exec = (s.data.executives || []).find(e => e.id === execId);
+    const name = exec ? exec.name : 'el ejecutivo';
+    const errors = {
+      not_configured: 'Falta configurar el correo de envío en Vercel (clave de Gmail).',
+      no_email: name + ' aún no tiene un correo registrado.',
+      send_failed: 'No se pudo enviar el correo. Intenta de nuevo en un momento.'
+    };
+    this.setState({ notifyBusy: true, notifyConfirm: null });
+    fetch('/api/notify', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ execId, month })
+    })
+      .then(r => r.json().catch(() => ({})).then(b => ({ ok: r.ok, b })))
+      .then(({ ok, b }) => {
+        if (!ok || !b.ok) throw new Error(errors[b.error] || errors.send_failed);
+        const data = JSON.parse(JSON.stringify(this.state.data));
+        if (!data.notices) data.notices = {};
+        if (!data.notices[execId]) data.notices[execId] = {};
+        data.notices[execId][month] = { sentAt: b.sentAt || Date.now() };
+        const m = MONTHS.find(x => x.value === month);
+        this.addLog(data, execId, month, 'Envió aviso por correo de retroalimentación de ' + (m ? m.label : month));
+        this.setState({ notifyBusy: false });
+        this.saveData(data);
+        this.showNotifyToast('ok', 'Aviso enviado a ' + name);
+      })
+      .catch(err => {
+        this.setState({ notifyBusy: false });
+        this.showNotifyToast('err', err.message || errors.send_failed);
+      });
+  }
+
+  showNotifyToast(kind, text){
+    this.setState({ notifyToast: { kind, text } });
+    this.__notifyToken = (this.__notifyToken || 0) + 1;
+    const token = this.__notifyToken;
+    setTimeout(() => { if (token === this.__notifyToken) this.setState({ notifyToast: null }); }, 6000);
   }
 
   manualSave(){
@@ -1947,6 +2013,14 @@ class Component extends DCLogic {
         saveStatusSaved: s.saveStatus === 'saved',
         saveStatusError: s.saveStatus === 'error',
         onManualSave: () => this.manualSave(),
+        canNotify: isManagerEditable,
+        notifyLabel: s.notifyBusy ? 'Enviando…' : (s.notifyConfirm === exec.id + '|' + s.selectedMonth ? 'Ya avisaste hace poco · clic para enviar otro' : '✉ Avisar por correo'),
+        notifyDisabled: s.notifyBusy,
+        onNotify: () => this.notifyExec(exec.id, s.selectedMonth),
+        lastNoticeLabel: (() => {
+          const n = data.notices && data.notices[exec.id] && data.notices[exec.id][s.selectedMonth];
+          return n ? 'Último aviso: ' + fmtUploaded(n.sentAt).replace('Cargado: ', '') : 'Aún no has avisado a ' + exec.name.split(' ')[0] + ' de este mes';
+        })(),
         totalDisplay: totalNow.isComplete ? String(totalNow.earned) : (totalNow.isEmpty ? '—' : String(Math.round(totalNow.earned))),
         totalColor: status.color, statusLabel: status.label, statusBg: status.bg, statusColor: status.color,
         partialNote,
@@ -2024,7 +2098,10 @@ class Component extends DCLogic {
       },
 
       saveToastSaved: s.saveStatus === 'saved',
-      saveToastError: s.saveStatus === 'error'
+      saveToastError: s.saveStatus === 'error',
+      notifyToastOk: !!(s.notifyToast && s.notifyToast.kind === 'ok'),
+      notifyToastErr: !!(s.notifyToast && s.notifyToast.kind === 'err'),
+      notifyToastText: s.notifyToast ? s.notifyToast.text : ''
     };
   }
 }
