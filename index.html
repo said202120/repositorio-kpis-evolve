@@ -479,6 +479,7 @@
                           <button onClick="{{opt.onClick}}" style="flex:1;border:1.5px solid {{opt.color}};background:{{opt.bg}};color:{{opt.fg}};font-size:11.5px;font-weight:700;padding:6px 8px;border-radius:8px;cursor:pointer;font-family:Inter,sans-serif">{{ opt.label }}</button>
                         </sc-for>
                       </div>
+                      <button onClick="{{kpi.onNotify}}" disabled="{{kpi.notifyDisabled}}" title="Envía el aviso por correo al ejecutivo; el comentario de arriba lo verá dentro del repositorio" style="width:100%;margin-top:6px;border:1px solid {{brand.accent}};background:white;color:{{brand.accent}};font-size:11.5px;font-weight:700;padding:6px 8px;border-radius:8px;cursor:pointer;font-family:Inter,sans-serif">{{ kpi.notifyLabel }}</button>
                     </sc-if>
                     <sc-if value="{{kpi.readOnly}}" hint-placeholder-val="{{true}}">
                       <div style="display:flex;align-items:center;gap:10px">
@@ -1941,6 +1942,9 @@ class Component extends DCLogic {
             attachmentCountLabel: `${attachmentsList.length}/5 archivos`,
             canAddMoreFiles: attachmentsList.length < 5,
             maxAttachmentsReached: attachmentsList.length >= 5,
+            notifyLabel: s.notifyBusy ? 'Enviando…' : (s.notifyConfirm === exec.id + '|' + s.selectedMonth ? 'Ya avisaste hace poco · clic para enviar otro' : '✉ Enviar retroalimentación por correo'),
+            notifyDisabled: s.notifyBusy,
+            onNotify: () => this.notifyExec(exec.id, s.selectedMonth),
             onScoreChange: e => this.setScore(exec.id, s.selectedMonth, k.id, parseInt(e.target.value)),
             onCommentChange: e => this.setComment(exec.id, s.selectedMonth, k.id, e.target.value),
             onExecCommentChange: e => this.setExecComment(exec.id, s.selectedMonth, k.id, e.target.value),
