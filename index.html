@@ -1266,7 +1266,7 @@ class Component extends DCLogic {
     const exec = (s.data.executives || []).find(e => e.id === execId);
     const name = exec ? exec.name : 'el ejecutivo';
     const errors = {
-      not_configured: 'Falta configurar el correo de envío en Vercel (clave de Gmail).',
+      not_configured: 'Falta configurar el correo de envío en Vercel (MAIL_USER y la clave del servicio de correo).',
       no_email: name + ' aún no tiene un correo registrado.',
       send_failed: 'No se pudo enviar el correo. Intenta de nuevo en un momento.'
     };
@@ -1305,7 +1305,7 @@ class Component extends DCLogic {
       return;
     }
     const errors = {
-      not_configured: 'Falta configurar el correo de envío en Vercel (clave de Gmail).',
+      not_configured: 'Falta configurar el correo de envío en Vercel (MAIL_USER y la clave del servicio de correo).',
       no_boss_email: 'Falta registrar el correo de Carlos en la base de datos.',
       nothing_to_report: 'Aún no hay retroalimentación avisada este mes. Usa primero "Avisar por correo" en cada ejecutivo.',
       send_failed: 'No se pudo enviar el resumen. Intenta de nuevo en un momento.'

@@ -1,11 +1,12 @@
 const nodemailer = require('nodemailer');
 
-// Gmail SMTP with an app password kept in Vercel env vars:
-//   MAIL_USER          the sending Gmail/Google Workspace address
-//   MAIL_APP_PASSWORD  its 16-character app password
-//   MAIL_FROM_NAME     (optional) display name, default "Said Zapién Jiménez"
+// Two ways to send, picked by which env vars exist in Vercel:
+//   A) Gmail SMTP:  MAIL_USER (sender address) + MAIL_APP_PASSWORD (16-char app password)
+//   B) Brevo API:   MAIL_USER (sender address, verified in Brevo) + BREVO_API_KEY
+//      (no DNS changes needed; the sender is verified by clicking a link Brevo emails)
+// Optional in both: MAIL_FROM_NAME (display name, default "Said Zapién Jiménez").
 function mailConfigured() {
-  return !!(process.env.MAIL_USER && process.env.MAIL_APP_PASSWORD);
+  return !!(process.env.MAIL_USER && (process.env.BREVO_API_KEY || process.env.MAIL_APP_PASSWORD));
 }
 
 function managerName() {
@@ -16,7 +17,27 @@ function fromAddress() {
   return `"${managerName().replace(/"/g, '')}" <${process.env.MAIL_USER}>`;
 }
 
+async function sendViaBrevo(message) {
+  const list = v => (v ? [].concat(v).map(email => ({ email })) : undefined);
+  const body = {
+    sender: { name: managerName(), email: process.env.MAIL_USER },
+    to: list(message.to), bcc: list(message.bcc),
+    subject: message.subject, htmlContent: message.html, textContent: message.text
+  };
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error('Brevo ' + res.status + ' ' + detail.slice(0, 200));
+  }
+  return res.json().catch(() => ({}));
+}
+
 async function sendMail(message) {
+  if (process.env.BREVO_API_KEY) return sendViaBrevo(message);
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com', port: 465, secure: true,
     auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_APP_PASSWORD }
