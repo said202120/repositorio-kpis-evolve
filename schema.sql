@@ -18,3 +18,7 @@ create table if not exists kpi_repo_files (
   data text not null,
   uploaded_at timestamptz not null default now()
 );
+
+-- Correo de cada usuario, para los avisos de retroalimentación (api/notify.js)
+-- y el resumen al jefe (api/notify-summary.js, usa el correo del usuario 'director').
+alter table kpi_repo_users add column if not exists email text;

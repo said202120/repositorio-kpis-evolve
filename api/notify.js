@@ -1,6 +1,6 @@
-const nodemailer = require('nodemailer');
 const { getPool } = require('./_db');
 const { getSession } = require('./_auth');
+const { mailConfigured, managerName: getManagerName, fromAddress, sendMail, monthLabel, escapeHtml } = require('./_mail');
 
 // Alerts an ejecutivo by email that the manager left feedback for a month.
 // The email carries no scores or comments, only the notice and a link.
@@ -9,17 +9,7 @@ const { getSession } = require('./_auth');
 //   MAIL_APP_PASSWORD  its 16-character app password
 //   MAIL_FROM_NAME     (optional) display name, default "Said Zapién Jiménez"
 //   APP_URL            (optional) link used in the email
-const MONTHS_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DEFAULT_APP_URL = 'https://repositorio-kpis-evolve-8ae3545f-f4.vercel.app';
-
-function monthLabel(ym) {
-  const [y, m] = ym.split('-').map(Number);
-  return `${MONTHS_ES[m - 1]} de ${y}`;
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
 
 function buildMessage({ execName, month, appUrl, managerName, from, to }) {
   const first = escapeHtml(String(execName || '').split(' ')[0] || '');
@@ -64,9 +54,7 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const user = process.env.MAIL_USER;
-  const pass = process.env.MAIL_APP_PASSWORD;
-  if (!user || !pass) {
+  if (!mailConfigured()) {
     res.status(503).json({ error: 'not_configured' });
     return;
   }
@@ -95,13 +83,11 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const managerName = process.env.MAIL_FROM_NAME || 'Said Zapién Jiménez';
     const message = buildMessage({
       execName: exec.name, month, appUrl: process.env.APP_URL || DEFAULT_APP_URL,
-      managerName, from: `"${managerName.replace(/"/g, '')}" <${user}>`, to: email
+      managerName: getManagerName(), from: fromAddress(), to: email
     });
-    const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } });
-    await transporter.sendMail(message);
+    await sendMail(message);
     res.status(200).json({ ok: true, sentAt: Date.now() });
   } catch (err) {
     console.error('notify failed:', err && err.message);

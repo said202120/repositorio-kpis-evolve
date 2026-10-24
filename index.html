@@ -186,6 +186,12 @@
             </div>
           </div>
         </div>
+        <sc-if value="{{canSendSummary}}" hint-placeholder-val="{{false}}">
+          <div data-no-print style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-8px 0 18px">
+            <button onClick="{{onSendSummary}}" disabled="{{summaryDisabled}}" style="border:1px solid {{brand.accent}};background:white;color:{{brand.accent}};font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:10px;cursor:pointer;font-family:Inter,sans-serif">{{ summaryLabel }}</button>
+            <div style="font-size:11.5px;color:oklch(0.55 0.02 255)">{{ summaryCaption }}</div>
+          </div>
+        </sc-if>
         <div style="display:flex;gap:20px;flex-wrap:wrap">
           <sc-for list="{{execCards}}" as="card" hint-placeholder-count="3">
             <div onClick="{{card.openHandler}}" style="flex:1;min-width:300px;background:white;border-radius:20px;padding:26px;border:1px solid oklch(0.91 0.01 255);box-shadow:0 1px 3px rgba(20,30,50,0.05);cursor:pointer;display:flex;flex-direction:column;gap:16px" style-hover="box-shadow:0 8px 22px rgba(20,30,50,0.1);transform:translateY(-2px)">
@@ -1053,7 +1059,9 @@ class Component extends DCLogic {
     saveStatus: 'idle',
     notifyBusy: false,
     notifyConfirm: null,
-    notifyToast: null
+    notifyToast: null,
+    summaryBusy: false,
+    summaryConfirm: null
   };
 
   constructor(props){
@@ -1282,6 +1290,43 @@ class Component extends DCLogic {
       })
       .catch(err => {
         this.setState({ notifyBusy: false });
+        this.showNotifyToast('err', err.message || errors.send_failed);
+      });
+  }
+
+  // Emails the manager's boss one summary of the month's feedback (/api/notify-summary).
+  sendSummary(month){
+    const s = this.state;
+    if (s.summaryBusy || !s.data) return;
+    const last = s.data.summaries && s.data.summaries[month];
+    if (last && Date.now() - last.sentAt < 3600000 && s.summaryConfirm !== month) {
+      this.setState({ summaryConfirm: month });
+      setTimeout(() => { if (this.state.summaryConfirm === month) this.setState({ summaryConfirm: null }); }, 6000);
+      return;
+    }
+    const errors = {
+      not_configured: 'Falta configurar el correo de envío en Vercel (clave de Gmail).',
+      no_boss_email: 'Falta registrar el correo de Carlos en la base de datos.',
+      nothing_to_report: 'Aún no hay retroalimentación avisada este mes. Usa primero "Avisar por correo" en cada ejecutivo.',
+      send_failed: 'No se pudo enviar el resumen. Intenta de nuevo en un momento.'
+    };
+    this.setState({ summaryBusy: true, summaryConfirm: null });
+    fetch('/api/notify-summary', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month })
+    })
+      .then(r => r.json().catch(() => ({})).then(b => ({ ok: r.ok, b })))
+      .then(({ ok, b }) => {
+        if (!ok || !b.ok) throw new Error(errors[b.error] || errors.send_failed);
+        const data = JSON.parse(JSON.stringify(this.state.data));
+        if (!data.summaries) data.summaries = {};
+        data.summaries[month] = { sentAt: b.sentAt || Date.now(), names: b.names || [] };
+        this.setState({ summaryBusy: false });
+        this.saveData(data);
+        this.showNotifyToast('ok', 'Resumen enviado a Carlos');
+      })
+      .catch(err => {
+        this.setState({ summaryBusy: false });
         this.showNotifyToast('err', err.message || errors.send_failed);
       });
   }
@@ -2099,6 +2144,14 @@ class Component extends DCLogic {
 
       saveToastSaved: s.saveStatus === 'saved',
       saveToastError: s.saveStatus === 'error',
+      canSendSummary: isAdminSession && s.role === 'manager',
+      summaryLabel: s.summaryBusy ? 'Enviando…' : (s.summaryConfirm === s.selectedMonth ? 'Ya enviaste uno hace poco · clic para enviar otro' : '✉ Enviar resumen a Carlos'),
+      summaryDisabled: s.summaryBusy,
+      onSendSummary: () => this.sendSummary(s.selectedMonth),
+      summaryCaption: (() => {
+        const n = data.summaries && data.summaries[s.selectedMonth];
+        return n ? 'Último resumen enviado: ' + fmtUploaded(n.sentAt).replace('Cargado: ', '') : 'Resume a Carlos a quién diste retroalimentación este mes (avisa primero a cada ejecutivo).';
+      })(),
       notifyToastOk: !!(s.notifyToast && s.notifyToast.kind === 'ok'),
       notifyToastErr: !!(s.notifyToast && s.notifyToast.kind === 'err'),
       notifyToastText: s.notifyToast ? s.notifyToast.text : ''
