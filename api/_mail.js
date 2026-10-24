@@ -30,8 +30,6 @@ async function sendViaBrevo(message) {
     body: JSON.stringify(body)
   });
   if (!res.ok) {
-    const k = process.env.BREVO_API_KEY;
-    console.error('brevo key shape:', 'len=' + k.length, 'prefix=' + k.slice(0, 8), 'trimmedLen=' + k.trim().length, 'hasInnerSpace=' + /\s/.test(k.trim()), 'sender=' + process.env.MAIL_USER);
     const detail = await res.text().catch(() => '');
     throw new Error('Brevo ' + res.status + ' ' + detail.slice(0, 200));
   }
