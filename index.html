@@ -500,7 +500,10 @@
                       </div>
                       <sc-if value="{{kpi.hasDeadlines}}" hint-placeholder-val="{{false}}">
                         <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px;background:oklch(0.985 0.004 255);border:1px solid oklch(0.93 0.01 255);border-radius:9px;padding:8px 10px">
-                          <div style="font-size:10.5px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px">Fechas de entrega del mes</div>
+                          <div style="font-size:10.5px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px">Fechas límite de entrega</div>
+                          <sc-if value="{{kpi.hasDeadlineHint}}" hint-placeholder-val="{{false}}">
+                            <div style="font-size:11px;color:oklch(0.45 0.02 255);line-height:1.45;margin-bottom:3px">{{ kpi.deadlineHint }}</div>
+                          </sc-if>
                           <sc-for list="{{kpi.deadlines}}" as="dl" hint-placeholder-count="3">
                             <div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px">
                               <span style="color:oklch(0.4 0.02 255)">{{ dl.label }}</span>
@@ -555,7 +558,10 @@
                       </div>
                       <sc-if value="{{kpi.hasDeadlines}}" hint-placeholder-val="{{false}}">
                         <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px;background:oklch(0.985 0.004 255);border:1px solid oklch(0.93 0.01 255);border-radius:9px;padding:8px 10px">
-                          <div style="font-size:10.5px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px">Fechas de entrega del mes</div>
+                          <div style="font-size:10.5px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px">Fechas límite de entrega</div>
+                          <sc-if value="{{kpi.hasDeadlineHint}}" hint-placeholder-val="{{false}}">
+                            <div style="font-size:11px;color:oklch(0.45 0.02 255);line-height:1.45;margin-bottom:3px">{{ kpi.deadlineHint }}</div>
+                          </sc-if>
                           <sc-for list="{{kpi.deadlines}}" as="dl" hint-placeholder-count="3">
                             <div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px">
                               <span style="color:oklch(0.4 0.02 255)">{{ dl.label }}</span>
@@ -815,7 +821,7 @@ function migrateRoleLabelsData(data){
 // graded, and a comparison against the date each support file was uploaded.
 // Everything is computed in Mexico City time as whole calendar days.
 const MX_TZ = 'America/Mexico_City';
-const MX_HOLIDAYS = ['2026-01-01','2026-02-02','2026-03-16','2026-05-01','2026-09-16','2026-11-16','2026-12-25'];
+const MX_HOLIDAYS = ['2026-01-01','2026-02-02','2026-03-16','2026-05-01','2026-09-16','2026-11-16','2026-12-25','2027-01-01','2027-02-01','2027-03-15'];
 const DOW_ES = ['dom','lun','mar','mié','jue','vie','sáb'];
 const MON_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
@@ -826,9 +832,11 @@ const MON_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov
 //   monthDay      {day, businessDays?}          Nth calendar day / Nth business day
 //   monthDays     {days: [15, 'end']}           several days of the month
 //   beforeMonthEnd{businessDays: n}             n business days before the last business day
+// Any rule may carry monthOffset: 1 when the delivery is due the month AFTER the one
+// being graded ("a mes vencido"): grading October, the deadline falls in November.
 const SPIN_DEADLINES = {
   veronica: {
-    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, businessDays:true },
+    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, businessDays:true, monthOffset:1 },
     'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
     'Envío de Maestro y Plan de Trabajo actualizado (semanal)': { type:'weekly', weekday:1 },
     'Reporte a semana vencida (cobertura Emetrix e incidencias)': { type:'weekly', weekday:1 },
@@ -837,7 +845,7 @@ const SPIN_DEADLINES = {
     'Comprobación de gastos': { type:'beforeMonthEnd', businessDays:4 }
   },
   daniel: {
-    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, businessDays:true },
+    'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, businessDays:true, monthOffset:1 },
     'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
     'Envío de información de activación (domingos)': { type:'weekly', weekday:0 },
     'Salida de campo y hallazgos (reporte)': { type:'monthDay', day:5 }
@@ -864,7 +872,9 @@ function dayLabel(n){ return `${DOW_ES[dowOfNum(n)]} ${parseInt(numToYmd(n).slic
 
 function deadlineDayNums(due, ym){
   if (!due || !/^\d{4}-\d{2}$/.test(ym || '')) return [];
-  const [y, m] = ym.split('-').map(Number);
+  const [y0, m0] = ym.split('-').map(Number);
+  const target = new Date(Date.UTC(y0, m0 - 1 + (due.monthOffset || 0), 1));
+  const y = target.getUTCFullYear(), m = target.getUTCMonth() + 1;
   const first = Math.floor(Date.UTC(y, m - 1, 1) / 86400000);
   const last = Math.floor(Date.UTC(y, m, 0) / 86400000);
   const nthBiz = k => { let c = 0; for (let n = first; n <= last; n++) { if (isBizDay(n) && ++c === k) return n; } return null; };
@@ -1748,14 +1758,24 @@ class Component extends DCLogic {
           const delivery = dueRule ? evaluateDelivery(dueRule, s.selectedMonth, rawAttachments.map(a => a && a.uploadedAt), Date.now()) : null;
           const TIMING_COLORS = { ontime: 'oklch(0.48 0.14 150)', late: 'oklch(0.55 0.15 60)', missed: 'oklch(0.5 0.17 25)', pending: 'oklch(0.55 0.02 255)', unknown: 'oklch(0.55 0.02 255)' };
           const daysText = n => n === 1 ? '1 día de retraso' : `${n} días de retraso`;
+          const pendingText = left => left <= 0 ? '⚠ Pendiente de carga · vence hoy'
+            : left === 1 ? '⚠ Pendiente de carga · vence mañana'
+            : left === 2 ? '⚠ Pendiente de carga · vence en 2 días'
+            : `✓ A tiempo · faltan ${left} días`;
+          const nextPending = delivery ? delivery.deadlines.find(d => d.status === 'pending') : null;
+          const anyMissed = delivery ? delivery.deadlines.some(d => d.status === 'missed') : false;
+          const deadlineHint = nextPending
+            ? `Recuerda subirlo a más tardar el ${dayLabel(nextPending.dayNum)}. Si lo subes después de esa fecha, cuenta como retraso.`
+            : (anyMissed ? 'Ya pasó la fecha límite: sube el archivo lo antes posible; cada día adicional cuenta como retraso.' : '');
           const deadlineRows = delivery ? delivery.deadlines.map(d => {
             let statusText;
             if (d.status === 'ontime') statusText = '✓ Entregado a tiempo';
             else if (d.status === 'late') statusText = `⚠ Entregado con ${daysText(d.daysLate)}`;
             else if (d.status === 'missed') statusText = `✕ Sin cargar · ${daysText(d.daysLate)}`;
             else if (d.status === 'unknown') statusText = 'Sin fecha de carga registrada';
-            else statusText = d.dayNum === delivery.today ? '⏳ Pendiente de carga · vence hoy' : '⏳ Pendiente de carga';
-            return { label: dayLabel(d.dayNum), statusText, color: TIMING_COLORS[d.status] };
+            else statusText = pendingText(d.dayNum - delivery.today);
+            const urgent = d.status === 'pending' && d.dayNum - delivery.today <= 2;
+            return { label: dayLabel(d.dayNum), statusText, color: urgent ? TIMING_COLORS.late : (d.status === 'pending' ? TIMING_COLORS.ontime : TIMING_COLORS[d.status]) };
           }) : [];
           const attachmentsList = rawAttachments.map((a, idx) => {
             const t = delivery && delivery.files[idx];
@@ -1777,6 +1797,8 @@ class Component extends DCLogic {
             id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight, icon: this.kpiIcon(k.name),
             okr: k.okr || null,
             hasDeadlines: deadlineRows.length > 0,
+            hasDeadlineHint: !!deadlineHint,
+            deadlineHint,
             deadlines: deadlineRows,
             hasReview: !!review,
             reviewLabel: review ? review.label : '',
