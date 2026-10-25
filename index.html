@@ -914,7 +914,9 @@ const SPIN_DEADLINES = {
     'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, monthOffset:1 },
     'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
     'Envío de información de activación (domingos)': { type:'weekly', weekday:0 },
-    'Salida de campo y hallazgos (reporte)': { type:'monthDay', day:5 }
+    'Salida de campo y hallazgos (reporte)': { type:'monthDay', day:5, byMonth: {
+      '2026-10': { type:'monthDay', day:31, info:'Salida única este mes: sáb 31 oct · Objetivo: demostradoras K-Pop Demon Hunters · Entregable: reporte de hallazgos.' }
+    } }
   }
 };
 // María Fernanda (GIFAN): rules taken from the "primeros N días" of her own KPI descriptions.
