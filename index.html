@@ -476,6 +476,9 @@
                     </div>
                     <div style="font-size:12.5px;color:oklch(0.48 0.02 255);margin-top:5px;line-height:1.5">{{ kpi.desc }}</div>
                     <div style="font-size:11.5px;color:oklch(0.6 0.02 255);margin-top:4px;font-style:italic">{{ kpi.considerations }}</div>
+                    <sc-if value="{{kpi.hasInfoNote}}" hint-placeholder-val="{{false}}">
+                      <div style="font-size:11.5px;font-weight:700;color:oklch(0.42 0.15 254);margin-top:6px;line-height:1.45">{{ kpi.infoNote }}</div>
+                    </sc-if>
                     <sc-if value="{{kpi.hasDerivedNote}}" hint-placeholder-val="{{false}}">
                       <div style="font-size:11.5px;font-weight:700;color:{{kpi.derivedColor}};margin-top:6px;line-height:1.45">{{ kpi.derivedNote }}</div>
                     </sc-if>
@@ -901,7 +904,10 @@ const SPIN_DEADLINES = {
     'Envío de Maestro y Plan de Trabajo actualizado (semanal)': { type:'weekly', weekday:1 },
     'Reporte a semana vencida (cobertura Emetrix e incidencias)': { type:'weekly', weekday:1 },
     'Entrega de iniciativas Evolve (adicionales a los sondeos de Emetrix)': { type:'monthDay', day:5, monthOffset:1 },
-    'Salida a campo mensual': { type:'monthDays', days:[15, 'end'] },
+    // byMonth replaces the rule for one month; `info` is a short note shown under the KPI.
+    'Salida a campo mensual': { type:'monthDays', days:[15, 'end'], byMonth: {
+      '2026-10': { type:'monthDay', day:31, info:'Salida única este mes: sáb 31 oct · Objetivo: demostradoras K-Pop Demon Hunters · Entregable: reporte de hallazgos.' }
+    } },
     'Comprobación de gastos': { type:'beforeMonthEnd', businessDays:4 }
   },
   daniel: {
@@ -929,11 +935,13 @@ const DERIVED_KPIS = {
     source: 'los días efectivos contra los objetivos del soporte de facturación'
   }
 };
-function deadlineRuleFor(execId, kpi){
+function deadlineRuleFor(execId, kpi, month){
   if (!kpi) return null;
   if (kpi.due && typeof kpi.due === 'object') return kpi.due;
   const table = SPIN_DEADLINES[execId];
-  return (table && table[kpi.name]) || null;
+  const rule = (table && table[kpi.name]) || null;
+  if (rule && rule.byMonth && month && rule.byMonth[month]) return rule.byMonth[month];
+  return rule;
 }
 
 function ymdToNum(ymd){ const p = ymd.split('-').map(Number); return Math.floor(Date.UTC(p[0], p[1] - 1, p[2]) / 86400000); }
@@ -1650,7 +1658,7 @@ class Component extends DCLogic {
       return;
     }
     const kpiDef = this.findKpi(this.state.data, execId, kpiId).kpi;
-    const dueRule = deadlineRuleFor(execId, kpiDef);
+    const dueRule = deadlineRuleFor(execId, kpiDef, month);
     if (dueRule) {
       const atts = rec ? (rec.attachments || (rec.attachment ? [rec.attachment] : [])) : [];
       const closure = deliveryClosure(execId, kpiDef, evaluateDelivery(dueRule, month, atts.map(a => a && a.uploadedAt), Date.now()), month);
@@ -1961,7 +1969,7 @@ class Component extends DCLogic {
           const kstatus = this.statusFor(score);
           const editable = isManagerEditable;
           const rawAttachments = rec.attachments || (rec.attachment ? [rec.attachment] : []);
-          const dueRule = deadlineRuleFor(exec.id, k);
+          const dueRule = deadlineRuleFor(exec.id, k, s.selectedMonth);
           const delivery = dueRule ? evaluateDelivery(dueRule, s.selectedMonth, rawAttachments.map(a => a && a.uploadedAt), Date.now()) : null;
           const TIMING_COLORS = { ontime: 'oklch(0.48 0.14 150)', late: 'oklch(0.55 0.15 60)', missed: 'oklch(0.5 0.17 25)', pending: 'oklch(0.55 0.02 255)', unknown: 'oklch(0.55 0.02 255)' };
           const daysText = n => n === 1 ? '1 día de retraso' : `${n} días de retraso`;
@@ -1988,12 +1996,17 @@ class Component extends DCLogic {
               derivedColor = TIMING_COLORS.ontime;
             }
           }
-          if (!derived && delivery && dueRule && dueRule.monthOffset) {
+          if (!derived && delivery && dueRule && (dueRule.monthOffset || dueRule.info)) {
             const dl = delivery.deadlines[0];
             if (nextPending) {
               const left = nextPending.dayNum - delivery.today;
               if (left <= 2) { derivedNote = pendingText(left) + ` · a más tardar el ${dayLabel(nextPending.dayNum)}`; derivedColor = TIMING_COLORS.late; }
-              else { derivedNote = `✓ En tiempo · Sube el soporte a más tardar el ${dayLabel(nextPending.dayNum)} (primeros ${dueRule.day} días del mes siguiente).`; derivedColor = TIMING_COLORS.ontime; }
+              else {
+                derivedNote = dueRule.monthOffset
+                  ? `✓ En tiempo · Sube el soporte a más tardar el ${dayLabel(nextPending.dayNum)} (primeros ${dueRule.day} días del mes siguiente).`
+                  : `✓ En tiempo · Sube el reporte a más tardar el ${dayLabel(nextPending.dayNum)}.`;
+                derivedColor = TIMING_COLORS.ontime;
+              }
             } else if (anyMissed) {
               derivedNote = `✕ Fuera de tiempo · La fecha límite fue el ${dayLabel(dl.dayNum)}; cada día adicional cuenta como retraso.`; derivedColor = TIMING_COLORS.missed;
             } else if (dl && dl.status === 'late') {
@@ -2049,6 +2062,7 @@ class Component extends DCLogic {
             hasDeadlineHint: !!(deadlineHint || uploadLockedNote),
             deadlineHint: uploadLockedNote ? 'Ya pasó la fecha límite y no se entregó a tiempo: este KPI ya no admite archivos.' : deadlineHint,
             hasDerivedNote: !!derivedNote, derivedNote, derivedColor,
+            hasInfoNote: !!(dueRule && dueRule.info), infoNote: (dueRule && dueRule.info) || '',
             deadlines: deadlineRows,
             hasReview: !!review,
             reviewLabel: review ? review.label : '',
