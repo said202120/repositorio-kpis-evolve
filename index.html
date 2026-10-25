@@ -570,6 +570,9 @@
                       <sc-if value="{{kpi.maxAttachmentsReached}}" hint-placeholder-val="{{false}}">
                         <div style="font-size:11px;color:oklch(0.55 0.02 255)">Ya subiste el máximo de 5 archivos para este KPI.</div>
                       </sc-if>
+                      <sc-if value="{{kpi.uploadLocked}}" hint-placeholder-val="{{false}}">
+                        <div style="font-size:12px;font-weight:700;color:oklch(0.5 0.17 25);background:oklch(0.96 0.03 25);border-radius:9px;padding:9px 11px;line-height:1.45">{{ kpi.uploadLockedNote }}</div>
+                      </sc-if>
                     </div>
                   </sc-if>
                   <sc-if value="{{isReviewerRole}}" hint-placeholder-val="{{false}}">
@@ -890,6 +893,15 @@ const SPIN_DEADLINES = {
     'Salida de campo y hallazgos (reporte)': { type:'monthDay', day:5 }
   }
 };
+// María Fernanda (GIFAN): rules taken from the "primeros N días" of her own KPI descriptions.
+SPIN_DEADLINES.marifer = {
+  'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, monthOffset:1 },
+  'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
+  'Envío y carga de plan de trabajo mensual': { type:'monthDay', day:5 },
+  'Reporte a semana vencida (cobertura Emetrix e incidencias)': { type:'weekly', weekday:1 },
+  'Envío de reportes mensuales al cliente': { type:'monthDay', day:5 },
+  'Entrega de reporte de cierre mensual Evolve': { type:'monthDay', day:8 }
+};
 SPIN_DEADLINES.edgar = SPIN_DEADLINES.daniel; // Alan's archived record keeps the same rules
 // KPIs that are not uploaded but worked out by the manager from a support file
 // that is itself due "a mes vencido". Matched by KPI name, case-insensitive.
@@ -985,6 +997,23 @@ function evaluateDelivery(due, ym, uploadTimestamps, nowTs){
     if (d.status === 'missed') d.daysLate = today - d.dayNum;
   });
   return { deadlines, files, today };
+}
+// Executives who owe nothing for a given month (e.g. Daniel took over the post
+// in October 2026): no points lost and uploads stay open.
+const DEADLINE_EXEMPT = { daniel: ['2026-10'], edgar: ['2026-10'] };
+
+// Once every deadline of a KPI has passed and at least one was never met, the
+// KPI is closed: uploads are blocked and the missed share of its weight is lost.
+//   points lost = weight × (missed deadlines / total deadlines)
+// A late upload (already delivered, just after the date) is not "missed".
+function deliveryClosure(execId, kpi, delivery, month){
+  if (!delivery || !kpi) return null;
+  const ds = delivery.deadlines;
+  const missed = ds.filter(d => d.status === 'missed').length;
+  if ((DEADLINE_EXEMPT[execId] || []).includes(month)) return { exempt: true, locked: false, lost: 0, missed, total: ds.length };
+  const locked = missed > 0 && !ds.some(d => d.status === 'pending');
+  const lost = locked ? Math.round((Number(kpi.weight) || 0) * missed / ds.length * 10) / 10 : 0;
+  return { exempt: false, locked, lost, missed, total: ds.length };
 }
 // END DEADLINES
 
@@ -1602,6 +1631,17 @@ class Component extends DCLogic {
       e.target.value = '';
       return;
     }
+    const kpiDef = this.findKpi(this.state.data, execId, kpiId).kpi;
+    const dueRule = deadlineRuleFor(execId, kpiDef);
+    if (dueRule) {
+      const atts = rec ? (rec.attachments || (rec.attachment ? [rec.attachment] : [])) : [];
+      const closure = deliveryClosure(execId, kpiDef, evaluateDelivery(dueRule, month, atts.map(a => a && a.uploadedAt), Date.now()), month);
+      if (closure && closure.locked) {
+        alert('Ya no puedes subir archivos a este KPI: estás fuera de tiempo.');
+        e.target.value = '';
+        return;
+      }
+    }
     if (!/\.(xlsx|xls|xlsb|pdf|ppt|pptx)$/i.test(file.name)) {
       alert('Solo se permiten archivos Excel (.xlsx, .xls, .xlsb), PDF o PowerPoint.');
       e.target.value = '';
@@ -1944,6 +1984,20 @@ class Component extends DCLogic {
               derivedNote = `✓ Entregado a tiempo (límite ${dayLabel(dl.dayNum)}).`; derivedColor = TIMING_COLORS.ontime;
             }
           }
+          const closure = delivery ? deliveryClosure(exec.id, k, delivery, s.selectedMonth) : null;
+          const fmtPts = n => Number.isInteger(n) ? String(n) : n.toFixed(1);
+          let uploadLockedNote = '';
+          if (closure && closure.locked) {
+            const lastDay = dayLabel(delivery.deadlines[delivery.deadlines.length - 1].dayNum);
+            derivedNote = closure.total > 1
+              ? `✕ Fuera de tiempo · Perdiste ${fmtPts(closure.lost)} de ${k.weight} pts de este KPI: ${closure.missed} de ${closure.total} entregas sin cargar en tiempo. Ya no se pueden subir archivos.`
+              : `✕ Fuera de tiempo · Perdiste ${fmtPts(closure.lost)} de ${k.weight} pts de este KPI por no entregarlo a tiempo (límite ${lastDay}). Ya no se pueden subir archivos.`;
+            derivedColor = TIMING_COLORS.missed;
+            uploadLockedNote = `Ya no puedes subir archivos: estás fuera de tiempo. Perdiste ${fmtPts(closure.lost)} pts de este KPI.`;
+          } else if (closure && closure.exempt && closure.missed > 0) {
+            derivedNote = 'Sin penalización este mes por cambio de ejecutivo.';
+            derivedColor = TIMING_COLORS.pending;
+          }
           const deadlineRows = delivery ? delivery.deadlines.map(d => {
             let statusText;
             if (d.status === 'ontime') statusText = '✓ Entregado a tiempo';
@@ -1974,8 +2028,8 @@ class Component extends DCLogic {
             id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight, icon: this.kpiIcon(k.name),
             okr: k.okr || null,
             hasDeadlines: deadlineRows.length > 0,
-            hasDeadlineHint: !!deadlineHint,
-            deadlineHint,
+            hasDeadlineHint: !!(deadlineHint || uploadLockedNote),
+            deadlineHint: uploadLockedNote ? 'Ya pasó la fecha límite y no se entregó a tiempo: este KPI ya no admite archivos.' : deadlineHint,
             hasDerivedNote: !!derivedNote, derivedNote, derivedColor,
             deadlines: deadlineRows,
             hasReview: !!review,
@@ -2006,7 +2060,8 @@ class Component extends DCLogic {
             hasAttachments: attachmentsList.length > 0,
             noAttachments: attachmentsList.length === 0,
             attachmentCountLabel: `${attachmentsList.length}/5 archivos`,
-            canAddMoreFiles: attachmentsList.length < 5,
+            canAddMoreFiles: attachmentsList.length < 5 && !uploadLockedNote,
+            uploadLocked: !!uploadLockedNote, uploadLockedNote,
             maxAttachmentsReached: attachmentsList.length >= 5,
             notifyLabel: s.notifyBusy ? 'Enviando…' : (s.notifyConfirm === exec.id + '|' + s.selectedMonth ? 'Ya avisaste hace poco · clic para enviar otro' : '✉ Enviar retroalimentación por correo'),
             notifyDisabled: s.notifyBusy,
