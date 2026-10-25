@@ -134,12 +134,18 @@ async function applyExecAction(db, data, execId, action) {
     // Keep the browser's id when it is well-formed and unused, so the
     // client's optimistic copy can download / remove it before a reload.
     const clientId = typeof att.id === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(att.id) && !attachments.some(a => a && a.id === att.id) ? att.id : null;
+    // KPIs split into several reports tag each file with the report it belongs to.
+    const slot = typeof att.slot === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(att.slot) ? att.slot : null;
+    if (slot && attachments.some(a => a && a.slot === slot)) {
+      throw new HttpError(400, 'Este reporte ya tiene un archivo');
+    }
     const meta = {
       id: clientId || newFileId(),
       name: att.name,
       type: typeof att.type === 'string' ? att.type : 'application/octet-stream',
       size: typeof att.size === 'number' ? att.size : null,
-      uploadedAt: Date.now()
+      uploadedAt: Date.now(),
+      ...(slot ? { slot } : {})
     };
     await ensureFilesTable();
     if (!(await insertFile(db, { ...meta, execId, month: action.month, kpiId: action.kpiId, dataUrl: att.dataUrl }))) {

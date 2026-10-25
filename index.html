@@ -551,6 +551,7 @@
                           </sc-for>
                         </div>
                       </sc-if>
+                      <sc-if value="{{kpi.noSlots}}" hint-placeholder-val="{{true}}">
                       <sc-if value="{{kpi.hasAttachments}}" hint-placeholder-val="{{false}}">
                         <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
                           <sc-for list="{{kpi.attachments}}" as="file" hint-placeholder-count="2">
@@ -558,6 +559,9 @@
                               <span>📎</span>
                               <div style="flex:1;min-width:0">
                                 <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="display:block;color:{{brand.accent}};font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                                <sc-if value="{{file.hasSlot}}" hint-placeholder-val="{{false}}">
+                                  <div style="font-size:11px;font-weight:700;color:oklch(0.42 0.15 254);margin-top:2px">{{ file.slotLabel }}</div>
+                                </sc-if>
                                 <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
                                 <sc-if value="{{file.hasTiming}}" hint-placeholder-val="{{false}}">
                                   <div style="font-size:11px;font-weight:700;color:{{file.timingColor}};margin-top:2px">{{ file.timingText }}</div>
@@ -578,6 +582,36 @@
                       </sc-if>
                       <sc-if value="{{kpi.uploadLocked}}" hint-placeholder-val="{{false}}">
                         <div style="font-size:12px;font-weight:700;color:oklch(0.5 0.17 25);background:oklch(0.96 0.03 25);border-radius:9px;padding:9px 11px;line-height:1.45">{{ kpi.uploadLockedNote }}</div>
+                      </sc-if>
+                      </sc-if>
+                      <sc-if value="{{kpi.hasSlots}}" hint-placeholder-val="{{false}}">
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                          <sc-for list="{{kpi.slots}}" as="sl" hint-placeholder-count="4">
+                            <div style="border:1px solid oklch(0.92 0.01 255);border-radius:9px;padding:8px 10px;background:oklch(0.99 0.003 255)">
+                              <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:6px">
+                                <span style="font-weight:700;color:oklch(0.35 0.02 255)">{{ sl.label }}</span>
+                                <span style="font-weight:700;color:{{sl.color}};text-align:right">{{ sl.statusText }}</span>
+                              </div>
+                              <sc-for list="{{sl.files}}" as="file" hint-placeholder-count="1">
+                                <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.006 255);border-radius:9px;padding:7px 9px;font-size:12px;margin-bottom:6px">
+                                  <span>📎</span>
+                                  <div style="flex:1;min-width:0">
+                                    <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="display:block;color:{{brand.accent}};font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                                    <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
+                                  </div>
+                                  <button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
+                                </div>
+                              </sc-for>
+                              <sc-if value="{{sl.canUpload}}" hint-placeholder-val="{{true}}">
+                                <input type="file" accept=".xlsx,.xls,.xlsb,.pdf,.ppt,.pptx" onChange="{{sl.onFileChange}}" style="font-size:12px;width:100%"/>
+                              </sc-if>
+                              <sc-if value="{{sl.locked}}" hint-placeholder-val="{{false}}">
+                                <div style="font-size:11.5px;font-weight:700;color:oklch(0.5 0.17 25)">Ya no puedes subir este reporte: estás fuera de tiempo.</div>
+                              </sc-if>
+                            </div>
+                          </sc-for>
+                          <div style="font-size:10.5px;color:oklch(0.6 0.02 255)">Un archivo por reporte · Excel (.xlsx, .xls, .xlsb), PDF o PowerPoint · máx. 3 MB c/u</div>
+                        </div>
                       </sc-if>
                     </div>
                   </sc-if>
@@ -622,6 +656,9 @@
                               <span>📎</span>
                               <div style="flex:1;min-width:0">
                                 <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="display:block;color:{{brand.accent}};font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
+                                <sc-if value="{{file.hasSlot}}" hint-placeholder-val="{{false}}">
+                                  <div style="font-size:11px;font-weight:700;color:oklch(0.42 0.15 254);margin-top:2px">{{ file.slotLabel }}</div>
+                                </sc-if>
                                 <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
                                 <sc-if value="{{file.hasTiming}}" hint-placeholder-val="{{false}}">
                                   <div style="font-size:11px;font-weight:700;color:{{file.timingColor}};margin-top:2px">{{ file.timingText }}</div>
@@ -905,6 +942,24 @@ function migratePlanTrabajoMariferData(data){
   });
   return changed;
 }
+// María Fernanda's monthly client reports are now four separate reports (see
+// `slots` in the deadline rules); the description lists them. Old default text only.
+const REPORTES_MENSUALES_OLD_DESC = 'Entrega primeros 5 días (Smiley Kids, Cristalinas, etc.).';
+const REPORTES_MENSUALES_DESC = 'Entrega primeros 5 días: Smiley Kids, Aura y Cristalinas, logs de Emetrix Web y cobertura mensual (un archivo por reporte).';
+function migrateReportesMensualesMariferData(data){
+  if (!data || !Array.isArray(data.executives)) return false;
+  let changed = false;
+  data.executives.forEach(e => {
+    if (!e || e.id !== 'marifer') return;
+    (e.categories || []).forEach(c => (c.kpis || []).forEach(k => {
+      if (k && k.name === 'Envío de reportes mensuales al cliente' && k.desc === REPORTES_MENSUALES_OLD_DESC) {
+        k.desc = REPORTES_MENSUALES_DESC;
+        changed = true;
+      }
+    }));
+  });
+  return changed;
+}
 // END MIGRATION
 
 // BEGIN DEADLINES (pure; tested in isolation)
@@ -954,7 +1009,14 @@ SPIN_DEADLINES.marifer = {
   'Envío y carga de plan de trabajo mensual': { type:'weekly', weekday:1 }, // name before the rename below
   'Envío de Maestro y Plan de Trabajo actualizado (semanal)': { type:'weekly', weekday:1 },
   'Reporte a semana vencida (cobertura Emetrix e incidencias)': { type:'weekly', weekday:1 },
-  'Envío de reportes mensuales al cliente': { type:'monthDay', day:5 },
+  // `slots`: each report has its own upload and its own deadline (all on the same day);
+  // the KPI's points are earned when every report is delivered.
+  'Envío de reportes mensuales al cliente': { type:'monthDay', day:5, slots: [
+    { id:'smiley', label:'Reporte Smiley Kids' },
+    { id:'aura', label:'Reporte Aura y Cristalinas' },
+    { id:'emetrix', label:'Reporte de logs de clientes de Emetrix Web' },
+    { id:'cobertura', label:'Reporte de cobertura mensual' }
+  ] },
   'Entrega de reporte de cierre mensual Evolve': { type:'monthDay', day:8 }
 };
 SPIN_DEADLINES.edgar = SPIN_DEADLINES.daniel; // Alan's archived record keeps the same rules
@@ -1055,6 +1117,28 @@ function evaluateDelivery(due, ym, uploadTimestamps, nowTs){
   });
   return { deadlines, files, today };
 }
+// Like evaluateDelivery, but for a KPI whose rule has `slots` (several reports,
+// each with its own file): every slot is evaluated on its own and the result
+// has one deadline per slot. Files are matched to a slot by their `slot` id.
+function evaluateKpiDelivery(rule, ym, attachments, nowTs){
+  const ts = (attachments || []).map(a => a && a.uploadedAt);
+  if (!rule || !rule.slots) return rule ? evaluateDelivery(rule, ym, ts, nowTs) : null;
+  const deadlines = [], files = {}, slots = [];
+  let today = null;
+  rule.slots.forEach(sl => {
+    const idxs = [];
+    (attachments || []).forEach((a, i) => { if (a && a.slot === sl.id) idxs.push(i); });
+    const d = evaluateDelivery(rule, ym, idxs.map(i => ts[i]), nowTs);
+    if (!d) return;
+    today = d.today;
+    const dl = d.deadlines[0];
+    deadlines.push({ ...dl, slotId: sl.id, slotLabel: sl.label });
+    Object.keys(d.files).forEach(k => { files[idxs[k]] = d.files[k]; });
+    slots.push({ id: sl.id, label: sl.label, idxs, status: dl.status, daysLate: dl.daysLate, dayNum: dl.dayNum });
+  });
+  return deadlines.length ? { deadlines, files, today, slots } : null;
+}
+
 // Executives who owe nothing for a given month (e.g. Daniel took over the post
 // in October 2026): no points lost and uploads stay open.
 const DEADLINE_EXEMPT = { daniel: ['2026-10'], edgar: ['2026-10'] };
@@ -1233,7 +1317,7 @@ class Component extends DCLogic {
           // Admin sessions bring the stored data up to date (team change)
           // before it is shown, and persist it only if something changed.
           const migrated = session.role === 'admin'
-            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data), migrateRoleLabelsData(payload.data), migrateIniciativasEvolveData(payload.data), migratePlanTrabajoMariferData(payload.data)].some(Boolean)
+            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data), migrateRoleLabelsData(payload.data), migrateIniciativasEvolveData(payload.data), migratePlanTrabajoMariferData(payload.data), migrateReportesMensualesMariferData(payload.data)].some(Boolean)
             : false;
           this.setState({ data: payload.data });
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(payload.data))); } catch(e) {}
@@ -1480,7 +1564,7 @@ class Component extends DCLogic {
           {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'Para Gifan o para Evolve.', weight:10},
           {id:'g4', name:'Envío de Maestro y Plan de Trabajo actualizado (semanal)', desc:'Todos los lunes.', considerations:'Para obtener la cobertura real a fin de mes.', weight:10},
           {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Riesgos por área y visibilidad por región.', weight:10},
-          {id:'g6', name:'Envío de reportes mensuales al cliente', desc:'Entrega primeros 5 días (Smiley Kids, Cristalinas, etc.).', considerations:'Reportes solicitados por el cliente.', weight:15},
+          {id:'g6', name:'Envío de reportes mensuales al cliente', desc:'Entrega primeros 5 días: Smiley Kids, Aura y Cristalinas, logs de Emetrix Web y cobertura mensual (un archivo por reporte).', considerations:'Reportes solicitados por el cliente.', weight:15},
           {id:'g7', name:'Entrega de reporte de cierre mensual Evolve', desc:'Entrega primeros 8 días.', considerations:'"Sello Evo": rotación, apego al plan, ventas, exhibiciones e iniciativas.', weight:20}
         ])},
         { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
@@ -1678,7 +1762,8 @@ class Component extends DCLogic {
     return rec.attachments;
   }
 
-  onKpiFileChange(execId, month, kpiId, e){
+  // slotId: set when the KPI has one upload per report (see `slots` in the deadline rules).
+  onKpiFileChange(execId, month, kpiId, e, slotId){
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     const rec = (this.state.data.scores[execId][month] || {})[kpiId];
@@ -1692,8 +1777,21 @@ class Component extends DCLogic {
     const dueRule = deadlineRuleFor(execId, kpiDef, month);
     if (dueRule) {
       const atts = rec ? (rec.attachments || (rec.attachment ? [rec.attachment] : [])) : [];
-      const closure = deliveryClosure(execId, kpiDef, evaluateDelivery(dueRule, month, atts.map(a => a && a.uploadedAt), Date.now()), month);
-      if (closure && closure.locked) {
+      const delivery = evaluateKpiDelivery(dueRule, month, atts, Date.now());
+      const closure = deliveryClosure(execId, kpiDef, delivery, month);
+      const slot = slotId && delivery && delivery.slots ? delivery.slots.find(sl => sl.id === slotId) : null;
+      if (slot) {
+        if (slot.idxs.length) {
+          alert('Este reporte ya tiene un archivo. Quítalo primero si quieres subir otro.');
+          e.target.value = '';
+          return;
+        }
+        if (slot.status === 'missed' && !(closure && closure.exempt)) {
+          alert('Ya no puedes subir este reporte: estás fuera de tiempo.');
+          e.target.value = '';
+          return;
+        }
+      } else if (closure && closure.locked) {
         alert('Ya no puedes subir archivos a este KPI: estás fuera de tiempo.');
         e.target.value = '';
         return;
@@ -1712,7 +1810,8 @@ class Component extends DCLogic {
     const reader = new FileReader();
     reader.onload = () => {
       this.saveKpiFile(execId, month, kpiId, {
-        name: file.name, type: file.type || 'application/octet-stream', size: file.size, dataUrl: reader.result
+        name: file.name, type: file.type || 'application/octet-stream', size: file.size, dataUrl: reader.result,
+        ...(slotId ? { slot: slotId } : {})
       });
     };
     reader.readAsDataURL(file);
@@ -2001,7 +2100,7 @@ class Component extends DCLogic {
           const editable = isManagerEditable;
           const rawAttachments = rec.attachments || (rec.attachment ? [rec.attachment] : []);
           const dueRule = deadlineRuleFor(exec.id, k, s.selectedMonth);
-          const delivery = dueRule ? evaluateDelivery(dueRule, s.selectedMonth, rawAttachments.map(a => a && a.uploadedAt), Date.now()) : null;
+          const delivery = dueRule ? evaluateKpiDelivery(dueRule, s.selectedMonth, rawAttachments, Date.now()) : null;
           const TIMING_COLORS = { ontime: 'oklch(0.48 0.14 150)', late: 'oklch(0.55 0.15 60)', missed: 'oklch(0.5 0.17 25)', pending: 'oklch(0.55 0.02 255)', unknown: 'oklch(0.55 0.02 255)' };
           const daysText = n => n === 1 ? '1 día de retraso' : `${n} días de retraso`;
           const pendingText = left => left <= 0 ? '⚠ Pendiente de carga · vence hoy'
@@ -2046,6 +2145,18 @@ class Component extends DCLogic {
               derivedNote = `✓ Entregado a tiempo (límite ${dayLabel(dl.dayNum)}).`; derivedColor = TIMING_COLORS.ontime;
             }
           }
+          if (delivery && delivery.slots) {
+            const total = delivery.slots.length;
+            const lateOnes = delivery.slots.filter(sl => sl.status === 'late').length;
+            if (nextPending) {
+              const left = nextPending.dayNum - delivery.today;
+              if (left <= 2) { derivedNote = pendingText(left) + ` · los ${total} reportes, a más tardar el ${dayLabel(nextPending.dayNum)}`; derivedColor = TIMING_COLORS.late; }
+              else { derivedNote = `✓ En tiempo · Sube los ${total} reportes a más tardar el ${dayLabel(nextPending.dayNum)}.`; derivedColor = TIMING_COLORS.ontime; }
+            } else if (!anyMissed) {
+              derivedNote = lateOnes ? `⚠ Los ${total} reportes entregados, ${lateOnes} con retraso.` : `✓ Los ${total} reportes entregados a tiempo.`;
+              derivedColor = lateOnes ? TIMING_COLORS.late : TIMING_COLORS.ontime;
+            }
+          }
           const closure = delivery ? deliveryClosure(exec.id, k, delivery, s.selectedMonth) : null;
           const fmtPts = n => Number.isInteger(n) ? String(n) : n.toFixed(1);
           let uploadLockedNote = '';
@@ -2069,20 +2180,27 @@ class Component extends DCLogic {
             deliverySummary = `Cargadas: ${delivered} de ${total}` + (delivered !== onTime ? ` · a tiempo: ${onTime}` : '');
             deliverySummaryColor = delivered === total ? TIMING_COLORS.ontime : (delivered === 0 ? TIMING_COLORS.pending : TIMING_COLORS.late);
           }
-          const deadlineRows = delivery ? delivery.deadlines.map(d => {
-            let statusText;
-            if (d.status === 'ontime') statusText = '✓ Entregado a tiempo';
-            else if (d.status === 'late') statusText = `⚠ Entregado con ${daysText(d.daysLate)}`;
-            else if (d.status === 'missed') statusText = `✕ Sin cargar · ${daysText(d.daysLate)}`;
-            else if (d.status === 'unknown') statusText = 'Sin fecha de carga registrada';
-            else statusText = pendingText(d.dayNum - delivery.today);
+          const dlText = d => {
+            if (d.status === 'ontime') return '✓ Entregado a tiempo';
+            if (d.status === 'late') return `⚠ Entregado con ${daysText(d.daysLate)}`;
+            if (d.status === 'missed') return `✕ Sin cargar · ${daysText(d.daysLate)}`;
+            if (d.status === 'unknown') return 'Sin fecha de carga registrada';
+            return pendingText(d.dayNum - delivery.today);
+          };
+          const dlColor = d => {
             const urgent = d.status === 'pending' && d.dayNum - delivery.today <= 2;
-            return { label: dayLabel(d.dayNum), statusText, color: urgent ? TIMING_COLORS.late : (d.status === 'pending' ? TIMING_COLORS.ontime : TIMING_COLORS[d.status]) };
-          }) : [];
+            return urgent ? TIMING_COLORS.late : (d.status === 'pending' ? TIMING_COLORS.ontime : TIMING_COLORS[d.status]);
+          };
+          const deadlineRows = delivery ? delivery.deadlines.map(d => ({
+            label: d.slotLabel ? `${d.slotLabel} · ${dayLabel(d.dayNum)}` : dayLabel(d.dayNum),
+            statusText: dlText(d), color: dlColor(d)
+          })) : [];
           const attachmentsList = rawAttachments.map((a, idx) => {
             const t = delivery && delivery.files[idx];
+            const slotDef = dueRule && dueRule.slots && dueRule.slots.find(x => x.id === a.slot);
             return {
             ...a,
+            hasSlot: !!slotDef, slotLabel: slotDef ? slotDef.label : '',
             hasTiming: !!t,
             timingText: t ? (t.status === 'late' ? `⚠ ${daysText(t.daysLate)} (límite ${dayLabel(t.dayNum)})` : `✓ A tiempo (límite ${dayLabel(t.dayNum)})`) : '',
             timingColor: t ? TIMING_COLORS[t.status] : '',
@@ -2094,6 +2212,19 @@ class Component extends DCLogic {
             onRemove: () => this.removeKpiFile(exec.id, s.selectedMonth, k.id, a.id)
             };
           });
+          // One block per report for KPIs with `slots`: its status, its file, its own upload.
+          const slotsUi = (delivery && delivery.slots) ? delivery.slots.map(sl => {
+            const d = delivery.deadlines.find(x => x.slotId === sl.id);
+            const files = attachmentsList.filter(f => f.slot === sl.id);
+            const locked = sl.status === 'missed' && !(closure && closure.exempt);
+            return {
+              label: sl.label, files, hasFiles: files.length > 0,
+              statusText: dlText(d), color: dlColor(d),
+              canUpload: files.length === 0 && !locked,
+              locked,
+              onFileChange: e => this.onKpiFileChange(exec.id, s.selectedMonth, k.id, e, sl.id)
+            };
+          }) : [];
           const review =REVIEW_STATUS[(rec.review && rec.review.status) || ''] || null;
           return {
             id: k.id, name: k.name, desc: k.desc, considerations: k.considerations, weight: k.weight, icon: this.kpiIcon(k.name),
@@ -2101,6 +2232,7 @@ class Component extends DCLogic {
             hasDeadlines: deadlineRows.length > 0,
             hasDeadlineHint: !!(deadlineHint || uploadLockedNote),
             deadlineHint: uploadLockedNote ? 'Ya pasó la fecha límite y no se entregó a tiempo: este KPI ya no admite archivos.' : deadlineHint,
+            hasSlots: slotsUi.length > 0, noSlots: slotsUi.length === 0, slots: slotsUi,
             hasDeliverySummary: !!deliverySummary, deliverySummary, deliverySummaryColor,
             hasDerivedNote: !!derivedNote, derivedNote, derivedColor,
             hasInfoNote: !!(dueRule && dueRule.info), infoNote: (dueRule && dueRule.info) || '',
