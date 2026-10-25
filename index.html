@@ -1930,6 +1930,20 @@ class Component extends DCLogic {
               derivedColor = TIMING_COLORS.ontime;
             }
           }
+          if (!derived && delivery && /soportes? de n[oó]mina/i.test(k.name || '')) {
+            const dl = delivery.deadlines[0];
+            if (nextPending) {
+              const left = nextPending.dayNum - delivery.today;
+              if (left <= 2) { derivedNote = pendingText(left) + ` · a más tardar el ${dayLabel(nextPending.dayNum)}`; derivedColor = TIMING_COLORS.late; }
+              else { derivedNote = `✓ En tiempo · Sube el soporte a más tardar el ${dayLabel(nextPending.dayNum)} (primeros 5 días del mes siguiente).`; derivedColor = TIMING_COLORS.ontime; }
+            } else if (anyMissed) {
+              derivedNote = `✕ Fuera de tiempo · La fecha límite fue el ${dayLabel(dl.dayNum)}; cada día adicional cuenta como retraso.`; derivedColor = TIMING_COLORS.missed;
+            } else if (dl && dl.status === 'late') {
+              derivedNote = `⚠ Entregado con ${daysText(dl.daysLate)} (límite ${dayLabel(dl.dayNum)}).`; derivedColor = TIMING_COLORS.late;
+            } else if (dl && dl.status === 'ontime') {
+              derivedNote = `✓ Entregado a tiempo (límite ${dayLabel(dl.dayNum)}).`; derivedColor = TIMING_COLORS.ontime;
+            }
+          }
           const deadlineRows = delivery ? delivery.deadlines.map(d => {
             let statusText;
             if (d.status === 'ontime') statusText = '✓ Entregado a tiempo';
