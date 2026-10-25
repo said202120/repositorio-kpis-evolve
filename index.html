@@ -476,6 +476,9 @@
                     </div>
                     <div style="font-size:12.5px;color:oklch(0.48 0.02 255);margin-top:5px;line-height:1.5">{{ kpi.desc }}</div>
                     <div style="font-size:11.5px;color:oklch(0.6 0.02 255);margin-top:4px;font-style:italic">{{ kpi.considerations }}</div>
+                    <sc-if value="{{kpi.hasDerivedNote}}" hint-placeholder-val="{{false}}">
+                      <div style="font-size:11.5px;font-weight:700;color:{{kpi.derivedColor}};margin-top:6px;line-height:1.45">{{ kpi.derivedNote }}</div>
+                    </sc-if>
                     <sc-if value="{{kpi.editing}}" hint-placeholder-val="{{false}}">
                       <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
                         <label style="font-size:12px;font-weight:600;color:oklch(0.5 0.02 255)">Ponderación</label>
@@ -888,6 +891,14 @@ const SPIN_DEADLINES = {
   }
 };
 SPIN_DEADLINES.edgar = SPIN_DEADLINES.daniel; // Alan's archived record keeps the same rules
+// KPIs that are not uploaded but worked out by the manager from a support file
+// that is itself due "a mes vencido". Matched by KPI name, case-insensitive.
+const DERIVED_KPIS = {
+  'tasa de ausentismo': {
+    due: { type:'monthDay', day:5, monthOffset:1 },
+    source: 'los días efectivos contra los objetivos del soporte de facturación'
+  }
+};
 function deadlineRuleFor(execId, kpi){
   if (!kpi) return null;
   if (kpi.due && typeof kpi.due === 'object') return kpi.due;
@@ -1905,6 +1916,20 @@ class Component extends DCLogic {
           const deadlineHint = nextPending
             ? `Recuerda subirlo a más tardar el ${dayLabel(nextPending.dayNum)}. Si lo subes después de esa fecha, cuenta como retraso.`
             : (anyMissed ? 'Ya pasó la fecha límite: sube el archivo lo antes posible; cada día adicional cuenta como retraso.' : '');
+          const derived = DERIVED_KPIS[String(k.name || '').trim().toLowerCase()];
+          let derivedNote = '', derivedColor = '';
+          if (derived) {
+            const dueDay = deadlineDayNums(derived.due, s.selectedMonth)[0];
+            const graded = score !== null && score !== undefined;
+            if (graded) { derivedNote = '✓ Calificado'; derivedColor = TIMING_COLORS.ontime; }
+            else if (dueDay !== undefined && mxDayNum(Date.now()) > dueDay) {
+              derivedNote = `⚠ Pendiente de calificar · el soporte de facturación ya debía estar disponible desde el ${dayLabel(dueDay)}`;
+              derivedColor = TIMING_COLORS.late;
+            } else {
+              derivedNote = `✓ En tiempo · Se obtiene de ${derived.source}, que se tiene los primeros 5 días del mes siguiente` + (dueDay !== undefined ? ` (a más tardar el ${dayLabel(dueDay)}).` : '.');
+              derivedColor = TIMING_COLORS.ontime;
+            }
+          }
           const deadlineRows = delivery ? delivery.deadlines.map(d => {
             let statusText;
             if (d.status === 'ontime') statusText = '✓ Entregado a tiempo';
@@ -1937,6 +1962,7 @@ class Component extends DCLogic {
             hasDeadlines: deadlineRows.length > 0,
             hasDeadlineHint: !!deadlineHint,
             deadlineHint,
+            hasDerivedNote: !!derivedNote, derivedNote, derivedColor,
             deadlines: deadlineRows,
             hasReview: !!review,
             reviewLabel: review ? review.label : '',
