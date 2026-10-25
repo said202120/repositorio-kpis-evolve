@@ -885,6 +885,10 @@ function migrateIniciativasEvolveData(data){
 }
 // María Fernanda's work plan is delivered every Monday (its text used to say
 // "primeros 5 días"). Same rule as above: only the old default text is replaced.
+// It also covers the personnel master, so it takes the same name as Verónica's
+// KPI. Only the old default name/text are replaced; weight and id stay.
+const PLAN_TRABAJO_OLD_NAME = 'Envío y carga de plan de trabajo mensual';
+const PLAN_TRABAJO_NAME = 'Envío de Maestro y Plan de Trabajo actualizado (semanal)';
 const PLAN_TRABAJO_OLD_DESC = 'Entrega primeros 5 días.';
 const PLAN_TRABAJO_DESC = 'Todos los lunes.';
 function migratePlanTrabajoMariferData(data){
@@ -893,10 +897,10 @@ function migratePlanTrabajoMariferData(data){
   data.executives.forEach(e => {
     if (!e || e.id !== 'marifer') return;
     (e.categories || []).forEach(c => (c.kpis || []).forEach(k => {
-      if (k && k.name === 'Envío y carga de plan de trabajo mensual' && k.desc === PLAN_TRABAJO_OLD_DESC) {
-        k.desc = PLAN_TRABAJO_DESC;
-        changed = true;
-      }
+      if (!k || k.name !== PLAN_TRABAJO_OLD_NAME) return;
+      k.name = PLAN_TRABAJO_NAME;
+      if (k.desc === PLAN_TRABAJO_OLD_DESC) k.desc = PLAN_TRABAJO_DESC;
+      changed = true;
     }));
   });
   return changed;
@@ -947,7 +951,8 @@ const SPIN_DEADLINES = {
 SPIN_DEADLINES.marifer = {
   'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, monthOffset:1 },
   'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
-  'Envío y carga de plan de trabajo mensual': { type:'weekly', weekday:1 },
+  'Envío y carga de plan de trabajo mensual': { type:'weekly', weekday:1 }, // name before the rename below
+  'Envío de Maestro y Plan de Trabajo actualizado (semanal)': { type:'weekly', weekday:1 },
   'Reporte a semana vencida (cobertura Emetrix e incidencias)': { type:'weekly', weekday:1 },
   'Envío de reportes mensuales al cliente': { type:'monthDay', day:5 },
   'Entrega de reporte de cierre mensual Evolve': { type:'monthDay', day:8 }
@@ -1473,7 +1478,7 @@ class Component extends DCLogic {
           {id:'g1', name:'Tasa de Ausentismo', desc:'Tener por lo menos 90% de días efectivos al mes.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5},
           {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega primeros 5 días hábiles.', considerations:'Enviar soporte del 1 al 5 del mes.', weight:15},
           {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega primeros 10 días.', considerations:'Para Gifan o para Evolve.', weight:10},
-          {id:'g4', name:'Envío y carga de plan de trabajo mensual', desc:'Todos los lunes.', considerations:'Para obtener la cobertura real a fin de mes.', weight:10},
+          {id:'g4', name:'Envío de Maestro y Plan de Trabajo actualizado (semanal)', desc:'Todos los lunes.', considerations:'Para obtener la cobertura real a fin de mes.', weight:10},
           {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Riesgos por área y visibilidad por región.', weight:10},
           {id:'g6', name:'Envío de reportes mensuales al cliente', desc:'Entrega primeros 5 días (Smiley Kids, Cristalinas, etc.).', considerations:'Reportes solicitados por el cliente.', weight:15},
           {id:'g7', name:'Entrega de reporte de cierre mensual Evolve', desc:'Entrega primeros 8 días.', considerations:'"Sello Evo": rotación, apego al plan, ventas, exhibiciones e iniciativas.', weight:20}
