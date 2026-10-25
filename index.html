@@ -856,6 +856,24 @@ function migrateRoleLabelsData(data){
   });
   return changed;
 }
+// "Entrega de iniciativas Evolve" is due the 5th of the month AFTER the one graded
+// (it used to read "primeros 8 días"). Only the old default text is replaced, so a
+// description edited later with "Editar KPIs" is left alone.
+const INICIATIVAS_EVOLVE_OLD_DESC = 'Entrega los primeros 8 días.';
+const INICIATIVAS_EVOLVE_DESC = 'Entrega los primeros 5 días del mes siguiente (mes vencido).';
+function migrateIniciativasEvolveData(data){
+  if (!data || !Array.isArray(data.executives)) return false;
+  let changed = false;
+  data.executives.forEach(e => {
+    (e && e.categories || []).forEach(c => (c.kpis || []).forEach(k => {
+      if (k && /^Entrega de iniciativas Evolve/.test(k.name || '') && k.desc === INICIATIVAS_EVOLVE_OLD_DESC) {
+        k.desc = INICIATIVAS_EVOLVE_DESC;
+        changed = true;
+      }
+    }));
+  });
+  return changed;
+}
 // END MIGRATION
 
 // BEGIN DEADLINES (pure; tested in isolation)
@@ -882,7 +900,7 @@ const SPIN_DEADLINES = {
     'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
     'Envío de Maestro y Plan de Trabajo actualizado (semanal)': { type:'weekly', weekday:1 },
     'Reporte a semana vencida (cobertura Emetrix e incidencias)': { type:'weekly', weekday:1 },
-    'Entrega de iniciativas Evolve (adicionales a los sondeos de Emetrix)': { type:'monthDay', day:8 },
+    'Entrega de iniciativas Evolve (adicionales a los sondeos de Emetrix)': { type:'monthDay', day:5, monthOffset:1 },
     'Salida a campo mensual': { type:'monthDays', days:[15, 'end'] },
     'Comprobación de gastos': { type:'beforeMonthEnd', businessDays:4 }
   },
@@ -1033,7 +1051,7 @@ function veronicaSpinCategories(){
       {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega los primeros 10 días.', considerations:'Enviar reporte de iniciativa corporativa para el cliente o para Evolve.', weight:10, okr:'Servicio de reporteo al cliente'},
       {id:'g4', name:'Envío de Maestro y Plan de Trabajo actualizado (semanal)', desc:'Todos los lunes.', considerations:'Se carga a Drive y los cruces deben coincidir entre ambos archivos, todo sin acentos, dobles espacios, etc.', weight:10, okr:'Eficiencia operativa'},
       {id:'g5', name:'Reporte a semana vencida (cobertura Emetrix e incidencias)', desc:'Lunes a semana vencida.', considerations:'Análisis de la cobertura semanal de promotoría fija y temporal, identificando riesgos por área y dando visibilidad por región.', weight:5, okr:'Eficiencia operativa'},
-      {id:'g6', name:'Entrega de iniciativas Evolve (adicionales a los sondeos de Emetrix)', desc:'Entrega los primeros 8 días.', considerations:'Reporte de cierre de mes: botargas, activaciones, tareas del mes, prioridades y peticiones adicionales del cliente.', weight:15, okr:'Servicio de reporteo al cliente'},
+      {id:'g6', name:'Entrega de iniciativas Evolve (adicionales a los sondeos de Emetrix)', desc:INICIATIVAS_EVOLVE_DESC, considerations:'Reporte de cierre de mes: botargas, activaciones, tareas del mes, prioridades y peticiones adicionales del cliente.', weight:15, okr:'Servicio de reporteo al cliente'},
       {id:'g7', name:'Salida a campo mensual', desc:'Una salida a campo cada quincena (2 al mes) con reporte de hallazgos en punto de venta.', considerations:'Cargar la presentación de hallazgos como archivo de soporte del KPI.', weight:10, effectiveFrom:'2026-07', okr:'Equipo de promotoría'}
     ])},
     { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
@@ -1176,7 +1194,7 @@ class Component extends DCLogic {
           // Admin sessions bring the stored data up to date (team change)
           // before it is shown, and persist it only if something changed.
           const migrated = session.role === 'admin'
-            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data), migrateRoleLabelsData(payload.data)].some(Boolean)
+            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data), migrateRoleLabelsData(payload.data), migrateIniciativasEvolveData(payload.data)].some(Boolean)
             : false;
           this.setState({ data: payload.data });
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(payload.data))); } catch(e) {}
@@ -1970,12 +1988,12 @@ class Component extends DCLogic {
               derivedColor = TIMING_COLORS.ontime;
             }
           }
-          if (!derived && delivery && /soportes? de n[oó]mina/i.test(k.name || '')) {
+          if (!derived && delivery && dueRule && dueRule.monthOffset) {
             const dl = delivery.deadlines[0];
             if (nextPending) {
               const left = nextPending.dayNum - delivery.today;
               if (left <= 2) { derivedNote = pendingText(left) + ` · a más tardar el ${dayLabel(nextPending.dayNum)}`; derivedColor = TIMING_COLORS.late; }
-              else { derivedNote = `✓ En tiempo · Sube el soporte a más tardar el ${dayLabel(nextPending.dayNum)} (primeros 5 días del mes siguiente).`; derivedColor = TIMING_COLORS.ontime; }
+              else { derivedNote = `✓ En tiempo · Sube el soporte a más tardar el ${dayLabel(nextPending.dayNum)} (primeros ${dueRule.day} días del mes siguiente).`; derivedColor = TIMING_COLORS.ontime; }
             } else if (anyMissed) {
               derivedNote = `✕ Fuera de tiempo · La fecha límite fue el ${dayLabel(dl.dayNum)}; cada día adicional cuenta como retraso.`; derivedColor = TIMING_COLORS.missed;
             } else if (dl && dl.status === 'late') {
