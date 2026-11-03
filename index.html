@@ -1090,7 +1090,7 @@ function evaluateDelivery(due, ym, uploadTimestamps, nowTs){
   const monthFirst = Math.floor(Date.UTC(y, m - 1, 1) / 86400000);
   const weekly = due.type === 'weekly';
   const deadlines = nums.map((n, k) => ({
-    dayNum: n, fileIdx: null, daysLate: 0, status: null,
+    dayNum: effectiveDay(n), fileIdx: null, daysLate: 0, status: null,
     start: k === 0 ? monthFirst : (weekly ? n - 1 : nums[k - 1] + 1)
   }));
   deadlines.forEach((d, k) => { d.end = k + 1 < deadlines.length ? deadlines[k + 1].start - 1 : Infinity; });
@@ -1137,6 +1137,16 @@ function evaluateKpiDelivery(rule, ym, attachments, nowTs){
     slots.push({ id: sl.id, label: sl.label, idxs, status: dl.status, daysLate: dl.daysLate, dayNum: dl.dayNum });
   });
   return deadlines.length ? { deadlines, files, today, slots } : null;
+}
+
+// One-off extensions: a deadline that falls on the key date is treated as due on
+// the value date, for everybody. Mon 2 Nov 2026: the database was paused
+// (Supabase free plan) and nobody could save, so the ejecutivos get until
+// Wed 4 Nov to upload what was due that Monday, with no delay recorded.
+const DEADLINE_EXTENSIONS = { '2026-11-02': '2026-11-04' };
+function effectiveDay(n){
+  const to = DEADLINE_EXTENSIONS[numToYmd(n)];
+  return to ? ymdToNum(to) : n;
 }
 
 // Executives who owe nothing for a given month (e.g. Daniel took over the post
