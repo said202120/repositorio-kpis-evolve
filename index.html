@@ -1185,6 +1185,13 @@ function effectiveDay(n){
 // Executives who owe nothing for a given month (e.g. Daniel took over the post
 // in October 2026): no points lost and uploads stay open.
 const DEADLINE_EXEMPT = { daniel: ['2026-10'], edgar: ['2026-10'] };
+// Single-KPI exemptions approved by the manager: uploads stay open past the
+// deadline and no points are lost; a late upload still shows its delay.
+//   Verónica, Oct 2026, payroll/expense support (g2): she uploaded October's
+//   support to November by mistake (it is due the month after).
+const DEADLINE_EXEMPT_KPI = {
+  veronica: { '2026-10': { g2: 'Sin penalización: el soporte de octubre se cargó por error en noviembre (autorizado por el gerente).' } }
+};
 
 // Once every deadline of a KPI has passed and at least one was never met, the
 // KPI is closed: uploads are blocked and the missed share of its weight is lost.
@@ -1195,6 +1202,8 @@ function deliveryClosure(execId, kpi, delivery, month){
   const ds = delivery.deadlines;
   const missed = ds.filter(d => d.status === 'missed').length;
   if ((DEADLINE_EXEMPT[execId] || []).includes(month)) return { exempt: true, locked: false, lost: 0, missed, total: ds.length };
+  const kpiReason = ((DEADLINE_EXEMPT_KPI[execId] || {})[month] || {})[kpi.id];
+  if (kpiReason) return { exempt: true, reason: kpiReason, locked: false, lost: 0, missed, total: ds.length };
   const locked = missed > 0 && !ds.some(d => d.status === 'pending');
   const lost = locked ? Math.round((Number(kpi.weight) || 0) * missed / ds.length * 10) / 10 : 0;
   return { exempt: false, locked, lost, missed, total: ds.length };
@@ -2215,6 +2224,9 @@ class Component extends DCLogic {
               : `✕ Fuera de tiempo · Perdiste ${fmtPts(closure.lost)} de ${k.weight} pts de este KPI por no entregarlo a tiempo (límite ${lastDay}). Ya no se pueden subir archivos.`;
             derivedColor = TIMING_COLORS.missed;
             uploadLockedNote = `Ya no puedes subir archivos: estás fuera de tiempo. Perdiste ${fmtPts(closure.lost)} pts de este KPI.`;
+          } else if (closure && closure.exempt && closure.reason) {
+            derivedNote = closure.reason;
+            derivedColor = TIMING_COLORS.pending;
           } else if (closure && closure.exempt && closure.missed > 0) {
             derivedNote = 'Sin penalización este mes por cambio de ejecutivo.';
             derivedColor = TIMING_COLORS.pending;
