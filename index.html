@@ -765,12 +765,29 @@
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900},&quot;alertThreshold&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:80,&quot;min&quot;:50,&quot;max&quot;:95,&quot;step&quot;:5,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Comportamiento&quot;},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;oklch(0.58 0.19 254)&quot;,&quot;options&quot;:[&quot;oklch(0.58 0.19 254)&quot;,&quot;oklch(0.55 0.19 230)&quot;,&quot;oklch(0.52 0.20 264)&quot;,&quot;oklch(0.6 0.17 245)&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Marca&quot;},&quot;showComments&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Comportamiento&quot;}}">
 // Evaluated period: last quarter of 2026. Older months (Jun/Jul 2026) stay
 // in the stored blob as history; they are just no longer selectable.
-const CURRENT_MONTH = '2026-10';
 const MONTHS = [
   {value:'2026-10',label:'Oct 2026'},
   {value:'2026-11',label:'Nov 2026'},
   {value:'2026-12',label:'Dic 2026'}
 ];
+// The page opens on the month in progress (Mexico City time), clamped to
+// the selectable range. It used to be fixed to '2026-10', so in November
+// managers kept landing on October while the team uploaded to November.
+function monthInProgress(){
+  let now;
+  try {
+    const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit' })
+      .formatToParts(new Date()).reduce((o, x) => { o[x.type] = x.value; return o; }, {});
+    now = `${p.year}-${p.month}`;
+  } catch (e) {
+    const d = new Date();
+    now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+  if (now < MONTHS[0].value) return MONTHS[0].value;
+  if (now > MONTHS[MONTHS.length - 1].value) return MONTHS[MONTHS.length - 1].value;
+  return MONTHS.some(m => m.value === now) ? now : MONTHS[0].value;
+}
+const CURRENT_MONTH = monthInProgress();
 // x position of month index i on a chart that spans `width` px.
 function monthX(i, width, offset){
   return (i * (width / Math.max(MONTHS.length - 1, 1))) + offset;
@@ -2486,7 +2503,7 @@ class Component extends DCLogic {
       months: MONTHS,
       selectedMonth: s.selectedMonth,
       selectedMonthLabel: monthLabelOf(s.selectedMonth),
-      onMonthSelect: e => this.setState({ selectedMonth: e.target.value }),
+      onMonthSelect: e => { this.setState({ selectedMonth: e.target.value }); this.refreshRemote(); },
       isHome: s.view === 'home',
       isDetail: s.view === 'detail',
       showBack: s.role !== 'ejecutivo',
