@@ -114,7 +114,8 @@ async function runVeronicaCleanup(db, data) {
     }]))
   };
   clearExec(data);
-  await db.query('delete from kpi_repo_files where exec_id = $1', [EXEC]);
+  await db.query(`update kpi_repo_files set removed_at = coalesce(removed_at, now()), removed_by = coalesce(removed_by, 'limpieza-2026-10-13')
+                  where exec_id = $1`, [EXEC]);
   markRun(data);
   await db.query(`create table if not exists kpi_repo_cleanup_report (
     id text primary key, report jsonb not null, created_at timestamptz not null default now())`);

@@ -673,6 +673,22 @@
                       <sc-if value="{{kpi.noAttachments}}" hint-placeholder-val="{{true}}">
                         <div style="font-size:12px;color:oklch(0.6 0.02 255)">Sin archivos adjuntos</div>
                       </sc-if>
+                      <sc-if value="{{kpi.hasRemovedFiles}}" hint-placeholder-val="{{false}}">
+                        <details style="margin-top:8px;font-size:11.5px">
+                          <summary style="cursor:pointer;font-weight:700;color:oklch(0.5 0.02 255)">Histórico: {{ kpi.removedCountLabel }}</summary>
+                          <div style="display:flex;flex-direction:column;gap:5px;margin-top:6px">
+                            <sc-for list="{{kpi.removedFiles}}" as="old" hint-placeholder-count="1">
+                              <div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.004 255);border:1px dashed oklch(0.88 0.01 255);border-radius:8px;padding:6px 9px">
+                                <div style="flex:1;min-width:0">
+                                  <div style="font-weight:600;color:oklch(0.4 0.02 255);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ old.name }}</div>
+                                  <div style="font-size:10.5px;color:oklch(0.55 0.02 255)">{{ old.uploadedDisplay }} · Quitado: {{ old.removedDisplay }}</div>
+                                </div>
+                                <a href="{{old.downloadUrl}}" download="{{old.name}}" target="_blank" rel="noopener" style="flex:none;font-size:11px;font-weight:700;color:{{brand.accent}};border:1px solid {{brand.accent}};padding:3px 8px;border-radius:7px;text-decoration:none">Descargar</a>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </details>
+                      </sc-if>
                     </div>
                   </sc-if>
                 </div>
@@ -1847,10 +1863,15 @@ class Component extends DCLogic {
     if (rec) {
       const attachments = this.attachmentsFor(rec);
       const idx = attachments.findIndex(a => a.id === attachmentId);
-      if (idx !== -1) attachments.splice(idx, 1);
+      // Kept as history (the server never deletes files either).
+      if (idx !== -1) {
+        const [gone] = attachments.splice(idx, 1);
+        if (!Array.isArray(rec.removedAttachments)) rec.removedAttachments = [];
+        rec.removedAttachments.push({ ...gone, dataUrl: undefined, removedAt: Date.now() });
+      }
     }
     const { kpi } = this.findKpi(data, execId, kpiId);
-    this.addLog(data, execId, month, `Eliminó archivo adjunto de "${kpi ? kpi.name : kpiId}"`);
+    this.addLog(data, execId, month, `Quitó un archivo de "${kpi ? kpi.name : kpiId}" (queda en el histórico)`);
     this.saveData(data, { type:'removeFile', execId, month, kpiId, attachmentId });
   }
 
@@ -2223,6 +2244,13 @@ class Component extends DCLogic {
             };
           });
           // One block per report for KPIs with `slots`: its status, its file, its own upload.
+          // Files the ejecutivo took off the KPI: never deleted, shown to reviewers as history.
+          const removedFiles = (Array.isArray(rec.removedAttachments) ? rec.removedAttachments : []).map(a => ({
+            name: a.name,
+            uploadedDisplay: fmtUploaded(a.uploadedAt),
+            removedDisplay: fmtUploaded(a.removedAt).replace(/^Cargado:\s*/, ''),
+            downloadUrl: '/api/file?id=' + encodeURIComponent(a.id || '')
+          }));
           const slotsUi = (delivery && delivery.slots) ? delivery.slots.map(sl => {
             const d = delivery.deadlines.find(x => x.slotId === sl.id);
             const files = attachmentsList.filter(f => f.slot === sl.id);
@@ -2273,6 +2301,9 @@ class Component extends DCLogic {
             noExecComment: !rec.execComment,
             attachments: attachmentsList,
             hasAttachments: attachmentsList.length > 0,
+            removedFiles,
+            hasRemovedFiles: removedFiles.length > 0,
+            removedCountLabel: removedFiles.length === 1 ? '1 archivo quitado' : `${removedFiles.length} archivos quitados`,
             noAttachments: attachmentsList.length === 0,
             attachmentCountLabel: `${attachmentsList.length}/5 archivos`,
             canAddMoreFiles: attachmentsList.length < 5 && !uploadLockedNote,

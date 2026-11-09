@@ -41,11 +41,12 @@ function sendFile(res, file) {
   res.status(200).end(buf);
 }
 
-async function restore(db, id) {
+async function restore(db, id, hasBackup) {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    const { rows: fr } = await client.query(`select * from ${BACKUP} where id = $1 limit 1`, [id]);
+    let { rows: fr } = await client.query('select * from kpi_repo_files where id = $1 and removed_at is not null', [id]);
+    if (!fr[0] && hasBackup) fr = (await client.query(`select * from ${BACKUP} where id = $1 limit 1`, [id])).rows;
     const f = fr[0];
     if (!f) throw Object.assign(new Error('No está en el respaldo'), { status: 404 });
     const { rows } = await client.query('select data from kpi_repo_state where id = $1 for update', [ROW_ID]);
@@ -59,15 +60,17 @@ async function restore(db, id) {
     if (!rec.attachments) rec.attachments = rec.attachment ? [rec.attachment] : [];
     delete rec.attachment;
     let already = rec.attachments.some(a => a && a.id === f.id);
+    if (Array.isArray(rec.removedAttachments)) rec.removedAttachments = rec.removedAttachments.filter(a => a && a.id !== f.id);
     await client.query(
       `insert into kpi_repo_files (id, exec_id, month, kpi_id, name, type, size, data, uploaded_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing`,
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       on conflict (id) do update set removed_at = null, removed_by = null`,
       [f.id, f.exec_id, f.month, f.kpi_id, f.name, f.type, f.size, f.data, f.uploaded_at]);
     if (!already) {
       rec.attachments.push({ id: f.id, name: f.name, type: f.type, size: f.size, uploadedAt: new Date(f.uploaded_at).getTime(), restoredAt: Date.now() });
       rec.attachments.sort((a, b) => (a.uploadedAt || 0) - (b.uploadedAt || 0));
       if (!data.logs) data.logs = [];
-      data.logs.unshift({ ts: Date.now(), execId: f.exec_id, month: f.month, role: 'manager', text: `Restauró el archivo "${f.name}" desde el respaldo del 13 oct` });
+      data.logs.unshift({ ts: Date.now(), execId: f.exec_id, month: f.month, role: 'manager', text: `Restauró el archivo "${f.name}" (histórico)` });
       if (data.logs.length > 300) data.logs.length = 300;
       await client.query(
         `insert into kpi_repo_state (id, data, updated_at) values ($1, $2, now())
@@ -96,8 +99,7 @@ module.exports = async (req, res) => {
 
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-      if (!(await backupExists(db))) { res.status(404).json({ error: 'No existe el respaldo' }); return; }
-      const r = await restore(db, String(body.restore || ''));
+      const r = await restore(db, String(body.restore || ''), await backupExists(db));
       res.status(200).json({ ok: true, ...r });
       return;
     }
@@ -117,12 +119,13 @@ module.exports = async (req, res) => {
     const exec = (data.executives || []).find(e => e && e.id === execId);
 
     const current = (await db.query(
-      `select id, month, kpi_id, name, size, uploaded_at from kpi_repo_files where exec_id = $1 order by month, kpi_id, uploaded_at`, [execId])).rows;
+      `select id, month, kpi_id, name, size, uploaded_at, removed_at, removed_by from kpi_repo_files where exec_id = $1 order by month, kpi_id, uploaded_at`, [execId])).rows;
     const inBlob = new Set();
     Object.values((data.scores || {})[execId] || {}).forEach(m => Object.values(m || {}).forEach(r => (r && r.attachments || []).forEach(a => a && inBlob.add(a.id))));
     const backup = (await backupExists(db)) ? (await db.query(
       `select id, month, kpi_id, name, size, uploaded_at from ${BACKUP} where exec_id = $1 order by month, kpi_id, uploaded_at`, [execId])).rows : null;
-    const currentIds = new Set(current.map(f => f.id));
+    const currentIds = new Set(current.filter(f => !f.removed_at).map(f => f.id));
+    const inTable = new Set(current.map(f => f.id));
     const logs = (data.logs || []).filter(l => l && l.execId === execId && /archivo/i.test(l.text || ''));
 
     const row = (f, extra) => `<tr><td>${esc(f.month)}</td><td>${esc(names[f.kpi_id] || f.kpi_id)}</td><td>${esc(f.name)}</td><td>${esc(f.size ? Math.round(f.size / 1024) + ' KB' : '')}</td><td>${esc(when(f.uploaded_at))}</td><td>${extra}</td></tr>`;
@@ -135,14 +138,16 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid 
 a.btn{background:#2563eb;color:#fff}button{background:#067647;color:#fff}.tag{font-size:12px;font-weight:700;color:#067647}</style></head><body>
 <h1>Archivos de soporte · ${esc(exec ? exec.name : execId)}</h1>
 <p class="muted">Otros ejecutivos: <a href="?exec=veronica">veronica</a> · <a href="?exec=edgar">edgar</a> · <a href="?exec=marifer">marifer</a> · <a href="?exec=daniela">daniela</a></p>
-<h2>1. Archivos guardados hoy (${current.length})</h2>
-${current.length ? '<table>' + head + current.map(f => row(f, `<a class="btn" href="/api/file?id=${encodeURIComponent(f.id)}">Descargar</a>${inBlob.has(f.id) ? '' : ' <span class="muted">(no ligado a ningún KPI)</span>'}`)).join('') + '</table>' : '<p class="muted">Ninguno.</p>'}
+<h2>1. Histórico de archivos (${current.length}) · nunca se borran</h2>
+${current.length ? '<table>' + head + current.map(f => row(f, `<a class="btn" href="/api/file?id=${encodeURIComponent(f.id)}">Descargar</a> ` + (f.removed_at
+  ? `<span class="muted">Quitado ${f.removed_by === 'ejecutivo' ? 'por el ejecutivo' : '(' + esc(f.removed_by || '') + ')'} el ${esc(when(f.removed_at))}</span> <button onclick="restore('${esc(f.id)}', this)">Restaurar en su KPI</button>`
+  : (inBlob.has(f.id) ? '<span class="tag">Activo</span>' : '<span class="muted">(no ligado a ningún KPI)</span>')))).join('') + '</table>' : '<p class="muted">Ninguno.</p>'}
 <h2>2. Borrados en la limpieza del 13 de octubre (respaldo ${BACKUP})</h2>
-${backup === null ? '<p class="muted">No existe la tabla de respaldo.</p>' : backup.length ? '<table>' + head + backup.map(f => row(f,
+${backup === null ? '<p class="muted">No existe la tabla de respaldo.</p>' : backup.length ? '<table>' + head + backup.filter(f => !inTable.has(f.id) || currentIds.has(f.id)).map(f => row(f,
   `<a class="btn" href="?backup=${encodeURIComponent(f.id)}">Descargar</a> ` + (currentIds.has(f.id) ? '<span class="tag">✓ Restaurado</span>' : `<button onclick="restore('${esc(f.id)}', this)">Restaurar en su KPI</button>`))).join('') + '</table>' : '<p class="muted">El respaldo no tiene archivos de este ejecutivo.</p>'}
 <h2>3. Bitácora de cargas y eliminaciones (${logs.length})</h2>
 ${logs.length ? '<ul>' + logs.map(l => `<li>${esc(when(l.ts))} · ${esc(l.month)} · ${esc(l.role)} · ${esc(l.text)}</li>`).join('') + '</ul>' : '<p class="muted">Sin registros.</p>'}
-<p class="muted">Un archivo que el ejecutivo quitó con "Quitar" después del 13 de octubre no se respalda y no aparece aquí; en la bitácora se ve como "Eliminó archivo adjunto".</p>
+<p class="muted">Desde el 9 de noviembre de 2026 ningún archivo se borra: "Quitar" solo lo saca de la vista del ejecutivo y queda aquí como histórico. Archivos quitados antes de esa fecha (fuera de la limpieza del 13 de octubre) no se pueden recuperar.</p>
 <script>
 async function restore(id, btn){
   btn.disabled = true; btn.textContent = 'Restaurando…';

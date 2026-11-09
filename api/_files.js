@@ -25,7 +25,12 @@ function ensureFilesTable() {
          data text not null,
          uploaded_at timestamptz not null default now()
        )`
-    ).catch(err => { tableReady = null; throw err; });
+    ).then(() => getPool().query(
+      // Files are never deleted: "Quitar" only stamps removed_at.
+      `alter table kpi_repo_files
+         add column if not exists removed_at timestamptz,
+         add column if not exists removed_by text`
+    )).catch(err => { tableReady = null; throw err; });
   }
   return tableReady;
 }

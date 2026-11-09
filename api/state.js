@@ -165,12 +165,17 @@ async function applyExecAction(db, data, execId, action) {
       const attachments = migrateAttachments(rec);
       const idx = attachments.findIndex(a => a.id === action.attachmentId);
       if (idx !== -1) {
-        attachments.splice(idx, 1);
+        // Never deleted: the file leaves the KPI's active list but stays in
+        // kpi_repo_files and in the KPI's history (removedAttachments).
+        const [gone] = attachments.splice(idx, 1);
+        if (!Array.isArray(rec.removedAttachments)) rec.removedAttachments = [];
+        rec.removedAttachments.push({ ...gone, removedAt: Date.now() });
         await ensureFilesTable();
-        await db.query('delete from kpi_repo_files where id = $1 and exec_id = $2', [action.attachmentId, execId]);
+        await db.query('update kpi_repo_files set removed_at = now(), removed_by = $3 where id = $1 and exec_id = $2',
+          [action.attachmentId, execId, 'ejecutivo']);
       }
     }
-    pushLog(data, execId, action.month, 'ejecutivo', 'Eliminó archivo adjunto');
+    pushLog(data, execId, action.month, 'ejecutivo', 'Quitó un archivo adjunto (queda en el histórico)');
     return;
   }
 
@@ -199,6 +204,8 @@ function mergeExecOwned(incoming, current) {
         delete rec.attachment;
         if (cur && (cur.attachments || cur.attachment)) rec.attachments = cur.attachments || [cur.attachment];
         else delete rec.attachments;
+        if (cur && Array.isArray(cur.removedAttachments)) rec.removedAttachments = cur.removedAttachments;
+        else delete rec.removedAttachments;
         if (cur && cur.execComment !== undefined) rec.execComment = cur.execComment;
         else delete rec.execComment;
       });
