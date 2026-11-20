@@ -1290,6 +1290,28 @@ function alanSpinCategories(){
 
 // Loads the Spin Master KPI set into the stored blob once (admin load),
 // then leaves it alone so later edits made with "Editar KPIs" stick.
+// "✓ Aprobar" on a KPI with no score gives it full marks (100% of its weight);
+// an existing score is kept. KPIs approved before this rule existed, still
+// without a score, get the same on the next manager load.
+const APPROVED_DEFAULT_SCORE = 100;
+function scoreApprovedWithoutScoreData(data){
+  let changed = false;
+  Object.entries((data && data.scores) || {}).forEach(([execId, months]) => {
+    Object.entries(months || {}).forEach(([month, kpis]) => {
+      Object.entries(kpis || {}).forEach(([kpiId, rec]) => {
+        if (!rec || !rec.review || rec.review.status !== 'aprobado') return;
+        if (rec.score !== null && rec.score !== undefined) return;
+        rec.score = APPROVED_DEFAULT_SCORE;
+        if (!data.logs) data.logs = [];
+        data.logs.unshift({ ts: Date.now(), execId, month, role: 'manager', text: `KPI aprobado sin calificación: se calificó con ${APPROVED_DEFAULT_SCORE} pts` });
+        changed = true;
+      });
+    });
+  });
+  if (data && data.logs && data.logs.length > 300) data.logs.length = 300;
+  return changed;
+}
+
 function migrateSpinKpisData(data){
   if (!data || !Array.isArray(data.executives)) return false;
   if (!Array.isArray(data.migrations)) data.migrations = [];
@@ -1398,7 +1420,7 @@ class Component extends DCLogic {
           // Admin sessions bring the stored data up to date (team change)
           // before it is shown, and persist it only if something changed.
           const migrated = session.role === 'admin'
-            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data), migrateRoleLabelsData(payload.data), migrateIniciativasEvolveData(payload.data), migratePlanTrabajoMariferData(payload.data), migrateReportesMensualesMariferData(payload.data)].some(Boolean)
+            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data), migrateRoleLabelsData(payload.data), migrateIniciativasEvolveData(payload.data), migratePlanTrabajoMariferData(payload.data), migrateReportesMensualesMariferData(payload.data), scoreApprovedWithoutScoreData(payload.data)].some(Boolean)
             : false;
           this.setState({ data: payload.data });
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(payload.data))); } catch(e) {}
@@ -1825,7 +1847,11 @@ class Component extends DCLogic {
     else delete rec.review;
     const { kpi } = this.findKpi(data, execId, kpiId);
     const name = kpi ? kpi.name : kpiId;
-    this.addLog(data, execId, month, status === 'aprobado' ? `Aprobó la evidencia de "${name}"` : status === 'cambios' ? `Pidió ajustes en la evidencia de "${name}"` : `Quitó la revisión de evidencia de "${name}"`);
+    const autoScore = status === 'aprobado' && (rec.score === null || rec.score === undefined);
+    if (autoScore) rec.score = APPROVED_DEFAULT_SCORE;
+    this.addLog(data, execId, month, status === 'aprobado'
+      ? `Aprobó la evidencia de "${name}"` + (autoScore ? ` y lo calificó con ${APPROVED_DEFAULT_SCORE} pts` : '')
+      : status === 'cambios' ? `Pidió ajustes en la evidencia de "${name}"` : `Quitó la revisión de evidencia de "${name}"`);
     this.saveData(data);
   }
 
