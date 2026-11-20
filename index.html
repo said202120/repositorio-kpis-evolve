@@ -940,15 +940,29 @@ const ACTIVACION_DESC = 'Domingo en la tarde-noche o, a más tardar, el lunes an
 const ACTIVACION_CONSIDERATIONS = 'Si lo envías el domingo en la tarde-noche, te ayudo con el reporte de demostradoras del fin de semana. ' +
   'Si no, entrégalo el lunes antes del mediodía: después de las 12:00 pm ese reporte no cuenta como válido. ' +
   'Además de enviarlo (puede ser por WhatsApp), súbelo aquí para que quede registrada la hora de entrega.';
+// Daniel's "Entrega de cierre de proyecto" is the monthly demo close: one
+// summary of all the month's activations for the client. Same rule: only the
+// old default text is replaced.
+const CIERRE_PROYECTO_OLD_DESC = 'Entrega los primeros 3 días hábiles tras terminar el proyecto.';
+const CIERRE_PROYECTO_OLD_CONSIDERATIONS = 'Hallazgos, ventas, casos de éxito y mejoras para presentar al cliente.';
+const CIERRE_PROYECTO_DESC = 'Cierre mensual de demostradoras: entrégalo en los primeros 3 días hábiles del mes siguiente.';
+const CIERRE_PROYECTO_CONSIDERATIONS = 'Un resumen de todas las activaciones del mes (por ejemplo, si hubo 4 fines de semana, las 4 activaciones), ' +
+  'pensado para el cliente: hallazgos, áreas de oportunidad, qué hicimos bien y qué podemos mejorar para el siguiente mes.';
 function migrateActivacionDanielData(data){
   if (!data || !Array.isArray(data.executives)) return false;
   let changed = false;
   data.executives.forEach(e => {
     if (!e || e.id !== 'daniel') return;
     (e.categories || []).forEach(c => (c.kpis || []).forEach(k => {
-      if (!k || k.name !== 'Envío de información de activación (domingos)') return;
-      if (k.desc === ACTIVACION_OLD_DESC) { k.desc = ACTIVACION_DESC; changed = true; }
-      if (k.considerations === ACTIVACION_OLD_CONSIDERATIONS) { k.considerations = ACTIVACION_CONSIDERATIONS; changed = true; }
+      if (!k) return;
+      if (k.name === 'Envío de información de activación (domingos)') {
+        if (k.desc === ACTIVACION_OLD_DESC) { k.desc = ACTIVACION_DESC; changed = true; }
+        if (k.considerations === ACTIVACION_OLD_CONSIDERATIONS) { k.considerations = ACTIVACION_CONSIDERATIONS; changed = true; }
+      }
+      if (k.name === 'Entrega de cierre de proyecto') {
+        if (k.desc === CIERRE_PROYECTO_OLD_DESC) { k.desc = CIERRE_PROYECTO_DESC; changed = true; }
+        if (k.considerations === CIERRE_PROYECTO_OLD_CONSIDERATIONS) { k.considerations = CIERRE_PROYECTO_CONSIDERATIONS; changed = true; }
+      }
     }));
   });
   return changed;
@@ -1345,7 +1359,7 @@ function alanSpinCategories(){
       {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega los primeros 10 días.', considerations:'Reporte de iniciativas corporativas a total proyectos, del 1 al 5 de cada mes.', weight:10, okr:'Servicio de reporteo al cliente'},
       {id:'g4', name:'Envío de información de activación (domingos)', desc:ACTIVACION_DESC, considerations:ACTIVACION_CONSIDERATIONS, weight:10, okr:'Servicio de reporteo al cliente'},
       {id:'g5', name:'Salida de campo y hallazgos (reporte)', desc:'Dos salidas mensuales con reporte de valor para el cliente.', considerations:'Enviar los primeros 5 días.', weight:15, okr:'Equipo de promotoría'},
-      {id:'g6', name:'Entrega de cierre de proyecto', desc:'Entrega los primeros 3 días hábiles tras terminar el proyecto.', considerations:'Hallazgos, ventas, casos de éxito y mejoras para presentar al cliente.', weight:20, okr:'Servicio de reporteo al cliente'}
+      {id:'g6', name:'Entrega de cierre de proyecto', desc:CIERRE_PROYECTO_DESC, considerations:CIERRE_PROYECTO_CONSIDERATIONS, weight:20, okr:'Servicio de reporteo al cliente'}
     ])},
     { id:'calidad', name:'Calidad y cliente', kpis: buildKpiList([
       {id:'c1', name:'Auditorías aprobadas', desc:'% de supervisiones con resultado satisfactorio.', considerations:'Revisión de master y plan de trabajo vs. HC o presupuesto.', weight:5, okr:'Eficiencia operativa'}
