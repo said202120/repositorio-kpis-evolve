@@ -234,6 +234,20 @@
               <sc-if value="{{card.alertNote}}" hint-placeholder-val="{{false}}">
                 <div style="font-size:12px;color:oklch(0.5 0.16 25);font-weight:600;background:oklch(0.95 0.06 25);padding:8px 10px;border-radius:9px">⚠ {{ card.alertNote }}</div>
               </sc-if>
+              <sc-if value="{{card.hasHistory}}" hint-placeholder-val="{{false}}">
+                <div style="border-top:1px solid oklch(0.93 0.01 255);padding-top:10px">
+                  <div style="font-size:10.5px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px">Histórico</div>
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <sc-for list="{{card.history}}" as="h" hint-placeholder-count="2">
+                      <div style="display:flex;gap:10px;align-items:flex-start;font-size:12px">
+                        <div style="width:58px;flex:none;font-weight:700;color:oklch(0.4 0.02 255)">{{ h.label }}</div>
+                        <div style="width:30px;flex:none;text-align:right;font-family:Sora,sans-serif;font-weight:800;color:{{h.scoreColor}}">{{ h.score }}</div>
+                        <div style="flex:1;color:oklch(0.48 0.02 255);line-height:1.4">{{ h.note }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
               <div style="font-size:13px;font-weight:700;color:{{brand.accent}};margin-top:auto">Ver detalle y calificar →</div>
             </div>
           </sc-for>
@@ -2157,26 +2171,46 @@ class Component extends DCLogic {
       }
     }));
 
+    // KPIs of a month that did not earn their full weight, biggest loss
+    // first (ungraded KPIs count as 0).
+    const shortfallsOf = (exec, month) => {
+      const monthScores = ((data.scores || {})[exec.id] || {})[month] || {};
+      const out = [];
+      exec.categories.forEach(cat => cat.kpis.forEach(k => {
+        if (k.effectiveFrom && k.effectiveFrom > month) return;
+        const rec = monthScores[k.id];
+        const graded = rec && rec.score !== null && rec.score !== undefined;
+        const lost = Math.round((Number(k.weight) || 0) * (1 - (graded ? rec.score : 0) / 100) * 10) / 10;
+        if (lost > 0) out.push({ name: k.name, lost, graded });
+      }));
+      return out.sort((a, b) => b.lost - a.lost);
+    };
+    const fmtLost = n => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+    const shortfallSummary = (list, max, longNames) => list.slice(0, max).map(x => {
+      const name = longNames ? x.name : x.name.replace(/\s*\(.*\)\s*$/, '');
+      return `${name} (${x.graded ? '' : 'sin calificar, '}−${fmtLost(x.lost)} pts)`;
+    }).join(' · ') + (list.length > max ? ` · y ${list.length - max} más` : '');
+
     const execCards = activeExecs.map(exec => {
       const totalNow = this.computeTotal(exec, s.selectedMonth);
       // Show the month's points as soon as anything is graded; KPIs still
       // ungraded count as 0 and are called out below the score.
       const showTotal = totalNow.isEmpty ? null : totalNow.earned;
-      // Why the month is below 100: every KPI that did not earn its full
-      // weight, biggest loss first (ungraded KPIs count as 0).
-      const monthScores = ((data.scores || {})[exec.id] || {})[s.selectedMonth] || {};
-      const shortfalls = [];
-      exec.categories.forEach(cat => cat.kpis.forEach(k => {
-        if (k.effectiveFrom && k.effectiveFrom > s.selectedMonth) return;
-        const rec = monthScores[k.id];
-        const graded = rec && rec.score !== null && rec.score !== undefined;
-        const lost = Math.round((Number(k.weight) || 0) * (1 - (graded ? rec.score : 0) / 100) * 10) / 10;
-        if (lost > 0) shortfalls.push({ name: k.name, lost, graded });
-      }));
-      shortfalls.sort((a, b) => b.lost - a.lost);
-      const fmtLost = n => (Number.isInteger(n) ? String(n) : n.toFixed(1));
-      const shortfallText = shortfalls.slice(0, 3).map(x => `${x.name} (${x.graded ? '' : 'sin calificar, '}−${fmtLost(x.lost)} pts)`).join(' · ') +
-        (shortfalls.length > 3 ? ` · y ${shortfalls.length - 3} más` : '');
+      const shortfalls = shortfallsOf(exec, s.selectedMonth);
+      const shortfallText = shortfallSummary(shortfalls, 3, true);
+      // Month-by-month history up to the month in progress, whatever month
+      // is selected: score and why it is below 100, or why it is pending.
+      const history = MONTHS.filter(m => m.value <= CURRENT_MONTH).map(m => {
+        const t = this.computeTotal(exec, m.value);
+        if (t.isEmpty) {
+          return { label: m.label, score: '—', scoreColor: 'oklch(0.55 0.02 255)',
+            note: m.value === CURRENT_MONTH ? 'Pendiente · el mes aún no cierra' : 'Pendiente de calificar' };
+        }
+        const st = this.statusFor(t.earned);
+        const sf = shortfallsOf(exec, m.value);
+        return { label: m.label, score: String(t.earned), scoreColor: st.color,
+          note: sf.length ? 'Faltó: ' + shortfallSummary(sf, 2, false) : '✓ Completo' };
+      });
       const latest = this.latestCompletedMonth(exec, s.selectedMonth);
       const displayScore = showTotal !== null ? showTotal : (latest ? latest.total.earned : null);
       const status = this.statusFor(displayScore);
@@ -2202,6 +2236,7 @@ class Component extends DCLogic {
           ? `Pendiente de calificar ${monthLabelOf(s.selectedMonth)}${latest ? ' · último: ' + latest.month.label + ' (' + latest.total.earned + ')' : ''}`
           : (shortfalls.length ? `No llegó al 100 por: ${shortfallText}` : null),
         alertNote,
+        history, hasHistory: history.length > 0,
         openHandler: () => { this.setState({ view:'detail', currentExecId: exec.id }); this.refreshRemote(); }
       };
     });
