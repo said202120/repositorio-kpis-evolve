@@ -42,6 +42,16 @@ const SEEDS = [
   }
 ];
 
+// One-time logins set up for an ejecutivo whose temporary password the manager
+// could not activate himself (2026-11-20: Daniel). Only the bcrypt hash is
+// here; the password itself was given to the manager directly. Upserted once
+// into kpi_repo_users; if the ejecutivo later changes it with "Cambiar
+// contraseña", this never overwrites it again (marker in data.migrations).
+const LOGIN_SEEDS = [
+  { id: 'login-daniele-2026-11-20', username: 'daniele', execId: 'daniel',
+    hash: '$2a$10$AVqa4W9BjhPo9CPPHDwWL.A6ovVHhe75PH7EHwfdLibcXxvKT.6rG' }
+];
+
 function kpiIdOf(data, seed) {
   const exec = (data.executives || []).find(e => e && e.id === seed.exec && !e.archived);
   for (const c of (exec && exec.categories) || []) {
@@ -103,14 +113,31 @@ async function runSeed(db, data) {
     await runOne(db, data, seed);
     changed = true;
   }
+  for (const login of LOGIN_SEEDS) {
+    if (done(data, login)) continue;
+    await db.query(
+      `insert into kpi_repo_users (username, password_hash, role, exec_id) values ($1, $2, 'ejecutivo', $3)
+       on conflict (username) do update set password_hash = excluded.password_hash, role = 'ejecutivo', exec_id = excluded.exec_id`,
+      [login.username, login.hash, login.execId]);
+    if (!Array.isArray(data.migrations)) data.migrations = [];
+    data.migrations.push(login.id);
+    changed = true;
+  }
   return changed;
 }
 
-const allDone = data => SEEDS.every(seed => done(data, seed));
+const allDone = data => SEEDS.every(seed => done(data, seed)) && LOGIN_SEEDS.every(l => done(data, l));
 
 // An admin save built from a copy loaded before a seed ran would put the KPI
 // back to ungraded: re-apply the grade if that copy left it empty.
 function reapplyOnStaleCopy(incoming, current) {
+  // Keep the login markers, so a save from an old tab never re-runs a login
+  // seed (that would undo a password the ejecutivo already changed).
+  for (const login of LOGIN_SEEDS) {
+    if (!done(current, login) || done(incoming, login)) continue;
+    if (!Array.isArray(incoming.migrations)) incoming.migrations = [];
+    incoming.migrations.push(login.id);
+  }
   for (const seed of SEEDS) {
     if (!done(current, seed) || done(incoming, seed)) continue;
     const id = kpiIdOf(current, seed);
