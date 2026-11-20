@@ -217,36 +217,27 @@
                   <div style="font-size:11px;font-weight:700;padding:4px 9px;border-radius:99px;background:oklch(0.94 0.02 255);color:oklch(0.4 0.03 255);letter-spacing:0.02em">{{ card.client }}</div>
                 </div>
               </div>
-              <div style="display:flex;align-items:flex-end;gap:12px">
-                <div style="font-family:Sora,sans-serif;font-weight:800;font-size:38px;line-height:1;color:{{card.totalColor}}">{{ card.totalDisplay }}</div>
-                <div style="font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:99px;background:{{card.statusBg}};color:{{card.statusColor}};margin-bottom:5px">{{ card.statusLabel }}</div>
-              </div>
-              <div style="font-size:12.5px;color:oklch(0.5 0.02 255);font-weight:600">Variable: <span style="color:oklch(0.3 0.02 255)">{{ card.variableDisplay }}</span></div>
-              <svg viewBox="0 0 300 70" style="width:100%;height:56px;display:block">
-                <polyline points="{{card.sparkPoints}}" fill="none" stroke="{{brand.accent}}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                <sc-for list="{{card.sparkDots}}" as="d" hint-placeholder-count="5">
-                  <circle cx="{{d.cx}}" cy="{{d.cy}}" r="3.5" fill="{{brand.accent}}"></circle>
+              <!-- Month-by-month results, oldest first: graded months as coloured tiles with the score, pending ones grey. -->
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{card.history}}" as="h" hint-placeholder-count="2">
+                  <div style="border-radius:13px;padding:11px 14px;background:{{h.bg}};border:2px solid {{h.ring}};display:flex;align-items:center;gap:12px">
+                    <div style="flex:none;width:62px">
+                      <div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:{{h.fg}}">{{ h.month }}</div>
+                      <div style="font-size:10.5px;font-weight:600;color:{{h.fg}};opacity:.8">{{ h.year }}</div>
+                    </div>
+                    <sc-if value="{{h.graded}}" hint-placeholder-val="{{true}}">
+                      <div style="font-family:Sora,sans-serif;font-weight:800;font-size:30px;line-height:1;color:{{h.fg}};flex:none">{{ h.score }}</div>
+                    </sc-if>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:12.5px;font-weight:800;color:{{h.fg}}">{{ h.title }}</div>
+                      <div style="font-size:11px;color:{{h.fg}};opacity:.85;line-height:1.35;margin-top:2px">{{ h.note }}</div>
+                    </div>
+                  </div>
                 </sc-for>
-              </svg>
-              <sc-if value="{{card.pendingNote}}" hint-placeholder-val="{{false}}">
-                <div style="font-size:12px;color:oklch(0.5 0.13 80);font-weight:600;background:oklch(0.96 0.05 85);padding:8px 10px;border-radius:9px">{{ card.pendingNote }}</div>
-              </sc-if>
+              </div>
+              <div style="font-size:12px;color:oklch(0.5 0.02 255);font-weight:600">Variable {{ selectedMonthLabel }}: <span style="color:oklch(0.3 0.02 255)">{{ card.variableDisplay }}</span></div>
               <sc-if value="{{card.alertNote}}" hint-placeholder-val="{{false}}">
                 <div style="font-size:12px;color:oklch(0.5 0.16 25);font-weight:600;background:oklch(0.95 0.06 25);padding:8px 10px;border-radius:9px">⚠ {{ card.alertNote }}</div>
-              </sc-if>
-              <sc-if value="{{card.hasHistory}}" hint-placeholder-val="{{false}}">
-                <div style="border-top:1px solid oklch(0.93 0.01 255);padding-top:10px">
-                  <div style="font-size:10.5px;font-weight:700;color:oklch(0.5 0.02 255);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px">Histórico</div>
-                  <div style="display:flex;flex-direction:column;gap:6px">
-                    <sc-for list="{{card.history}}" as="h" hint-placeholder-count="2">
-                      <div style="display:flex;gap:10px;align-items:flex-start;font-size:12px">
-                        <div style="width:58px;flex:none;font-weight:700;color:oklch(0.4 0.02 255)">{{ h.label }}</div>
-                        <div style="width:30px;flex:none;text-align:right;font-family:Sora,sans-serif;font-weight:800;color:{{h.scoreColor}}">{{ h.score }}</div>
-                        <div style="flex:1;color:oklch(0.48 0.02 255);line-height:1.4">{{ h.note }}</div>
-                      </div>
-                    </sc-for>
-                  </div>
-                </div>
               </sc-if>
               <div style="font-size:13px;font-weight:700;color:{{brand.accent}};margin-top:auto">Ver detalle y calificar →</div>
             </div>
@@ -2200,16 +2191,21 @@ class Component extends DCLogic {
       const shortfallText = shortfallSummary(shortfalls, 3, true);
       // Month-by-month history up to the month in progress, whatever month
       // is selected: score and why it is below 100, or why it is pending.
-      const history = MONTHS.filter(m => m.value <= CURRENT_MONTH).map(m => {
+      const lastShown = s.selectedMonth > CURRENT_MONTH ? s.selectedMonth : CURRENT_MONTH;
+      const history = MONTHS.filter(m => m.value <= lastShown).map(m => {
         const t = this.computeTotal(exec, m.value);
+        const [mon, yr] = m.label.split(' ');
+        const ring = m.value === s.selectedMonth ? 'oklch(0.55 0.15 254 / 0.55)' : 'transparent';
         if (t.isEmpty) {
-          return { label: m.label, score: '—', scoreColor: 'oklch(0.55 0.02 255)',
-            note: m.value === CURRENT_MONTH ? 'Pendiente · el mes aún no cierra' : 'Pendiente de calificar' };
+          return { month: mon, year: yr, graded: false, score: '', ring,
+            bg: 'oklch(0.965 0.004 255)', fg: 'oklch(0.48 0.02 255)', title: 'Pendiente',
+            note: m.value >= CURRENT_MONTH ? 'El mes aún no cierra' : 'Sin calificar todavía' };
         }
         const st = this.statusFor(t.earned);
         const sf = shortfallsOf(exec, m.value);
-        return { label: m.label, score: String(t.earned), scoreColor: st.color,
-          note: sf.length ? 'Faltó: ' + shortfallSummary(sf, 2, false) : '✓ Completo' };
+        return { month: mon, year: yr, graded: true, score: String(t.earned), ring,
+          bg: st.bg, fg: st.color, title: `${st.label} · ${t.earned} de 100 pts`,
+          note: sf.length ? 'Faltó: ' + shortfallSummary(sf, 2, false) : '✓ Todos los KPIs completos' };
       });
       const latest = this.latestCompletedMonth(exec, s.selectedMonth);
       const displayScore = showTotal !== null ? showTotal : (latest ? latest.total.earned : null);
