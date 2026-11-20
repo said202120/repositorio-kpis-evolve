@@ -2159,13 +2159,30 @@ class Component extends DCLogic {
 
     const execCards = activeExecs.map(exec => {
       const totalNow = this.computeTotal(exec, s.selectedMonth);
-      const showTotal = totalNow.isComplete ? totalNow.earned : null;
+      // Show the month's points as soon as anything is graded; KPIs still
+      // ungraded count as 0 and are called out below the score.
+      const showTotal = totalNow.isEmpty ? null : totalNow.earned;
+      // Why the month is below 100: every KPI that did not earn its full
+      // weight, biggest loss first (ungraded KPIs count as 0).
+      const monthScores = ((data.scores || {})[exec.id] || {})[s.selectedMonth] || {};
+      const shortfalls = [];
+      exec.categories.forEach(cat => cat.kpis.forEach(k => {
+        if (k.effectiveFrom && k.effectiveFrom > s.selectedMonth) return;
+        const rec = monthScores[k.id];
+        const graded = rec && rec.score !== null && rec.score !== undefined;
+        const lost = Math.round((Number(k.weight) || 0) * (1 - (graded ? rec.score : 0) / 100) * 10) / 10;
+        if (lost > 0) shortfalls.push({ name: k.name, lost, graded });
+      }));
+      shortfalls.sort((a, b) => b.lost - a.lost);
+      const fmtLost = n => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+      const shortfallText = shortfalls.slice(0, 3).map(x => `${x.name} (${x.graded ? '' : 'sin calificar, '}−${fmtLost(x.lost)} pts)`).join(' · ') +
+        (shortfalls.length > 3 ? ` · y ${shortfalls.length - 3} más` : '');
       const latest = this.latestCompletedMonth(exec, s.selectedMonth);
       const displayScore = showTotal !== null ? showTotal : (latest ? latest.total.earned : null);
       const status = this.statusFor(displayScore);
       // Each scored month sits at its own slot in the quarter, so a lone
       // October score is a single dot on the left, not a stretched line.
-      const sparkSeries = MONTHS.map((m, i) => ({ i, t: this.computeTotal(exec, m.value) })).filter(x => x.t.isComplete);
+      const sparkSeries = MONTHS.map((m, i) => ({ i, t: this.computeTotal(exec, m.value) })).filter(x => !x.t.isEmpty);
       const sparkPoints = sparkSeries.map(x => `${monthX(x.i, 280, 10)},${60 - (x.t.earned/100*50)}`).join(' ');
       const sparkDots = sparkSeries.map(x => ({ cx: monthX(x.i, 280, 10), cy: 60 - (x.t.earned/100*50) }));
       const alertNote = latest && latest.total.earned < (this.props.alertThreshold ?? 80) ? `${latest.month.label}: ${latest.total.earned} pts, por debajo del umbral` : null;
@@ -2181,7 +2198,9 @@ class Component extends DCLogic {
         totalColor: status.color, statusLabel: status.label, statusBg: status.bg, statusColor: status.color,
         barPct: (displayScore || 0) + '%',
         sparkPoints, sparkDots,
-        pendingNote: showTotal === null ? `Pendiente de calificar ${monthLabelOf(s.selectedMonth)}${latest ? ' · último: ' + latest.month.label + ' (' + latest.total.earned + ')' : ''}` : null,
+        pendingNote: showTotal === null
+          ? `Pendiente de calificar ${monthLabelOf(s.selectedMonth)}${latest ? ' · último: ' + latest.month.label + ' (' + latest.total.earned + ')' : ''}`
+          : (shortfalls.length ? `No llegó al 100 por: ${shortfallText}` : null),
         alertNote,
         openHandler: () => { this.setState({ view:'detail', currentExecId: exec.id }); this.refreshRemote(); }
       };
@@ -2195,13 +2214,13 @@ class Component extends DCLogic {
       const totalNow = this.computeTotal(exec, s.selectedMonth);
       const status = this.statusFor(totalNow.isComplete ? totalNow.earned : (totalNow.isEmpty ? null : totalNow.earned));
       const chartMonths = MONTHS.map(m => ({ m, t: this.computeTotal(exec, m.value) }));
-      const validVals = chartMonths.filter(x => x.t.isComplete).map(x => x.t.earned);
+      const validVals = chartMonths.filter(x => !x.t.isEmpty).map(x => x.t.earned);
       const yFor = v => 100 - (v/100*80);
-      const chartPoints = chartMonths.filter(x => x.t.isComplete).map((x,i,arr) => {
+      const chartPoints = chartMonths.filter(x => !x.t.isEmpty).map((x,i,arr) => {
         const idx = chartMonths.indexOf(x);
         return `${monthX(idx, 580, 20)},${yFor(x.t.earned)}`;
       }).join(' ');
-      const chartDots = chartMonths.map((x,idx) => x.t.isComplete ? {
+      const chartDots = chartMonths.map((x,idx) => !x.t.isEmpty ? {
         cx: monthX(idx, 580, 20), cy: yFor(x.t.earned), fill: accent
       } : null).filter(Boolean);
       const chartLabels = chartMonths.map((x,idx) => ({ x:monthX(idx, 580, 20), text: x.m.label.split(' ')[0] }));
@@ -2487,7 +2506,7 @@ class Component extends DCLogic {
         roleLabel: l.role === 'manager' ? 'Gerente Operaciones' : l.role === 'jefe' ? 'Director Operaciones' : 'Ejecutivo'
       }));
 
-      const onExportCsv = () => this.exportCsv(exec, s.selectedMonth, monthLabelOf(s.selectedMonth), totalNow.isComplete ? totalNow.earned : null, variableEarned);
+      const onExportCsv = () => this.exportCsv(exec, s.selectedMonth, monthLabelOf(s.selectedMonth), totalNow.isEmpty ? null : totalNow.earned, variableEarned);
       const onExportPdf = () => window.print();
 
       const mr = (data.midReviews && data.midReviews[exec.id] && data.midReviews[exec.id][s.selectedMonth]) || { note:'', status:'ok' };
