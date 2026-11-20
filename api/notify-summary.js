@@ -14,14 +14,20 @@ function clientName(c) {
 }
 
 // Pure: turns the stored blob into the summary structure.
-function buildSummary(data, month) {
+// With includeUnnotified (preview only), executives with any grading or
+// comment are included even if they were not notified yet, flagged.
+function buildSummary(data, month, includeUnnotified) {
   const notices = (data && data.notices) || {};
   const groups = [];
   ((data && data.executives) || []).forEach(exec => {
     if (!exec || exec.archived) return;
     const notice = notices[exec.id] && notices[exec.id][month];
-    if (!notice) return;
     const monthScores = (data.scores && data.scores[exec.id] && data.scores[exec.id][month]) || {};
+    if (!notice) {
+      if (!includeUnnotified) return;
+      const hasAny = Object.values(monthScores).some(r => r && (typeof r.score === 'number' || (r.comment || '').trim()));
+      if (!hasAny) return;
+    }
     let earned = 0, scoredWeight = 0, totalWeight = 0;
     const kpis = [];
     (exec.categories || []).forEach(cat => (cat.kpis || []).forEach(k => {
@@ -38,7 +44,7 @@ function buildSummary(data, month) {
     let g = groups.find(x => x.client === key);
     if (!g) { g = { client: key, clientName: clientName(key), execs: [] }; groups.push(g); }
     g.execs.push({
-      name: exec.name, roleLabel: exec.roleLabel || '', sentAt: notice.sentAt,
+      name: exec.name, roleLabel: exec.roleLabel || '', sentAt: notice ? notice.sentAt : null, notNotified: !notice,
       earned: Math.round(earned * 10) / 10, scoredWeight, totalWeight, kpis
     });
   });
@@ -50,10 +56,19 @@ function joinNames(names) {
   return names.slice(0, -1).join(', ') + ' y ' + names[names.length - 1];
 }
 
-function buildMessage({ groups, month, manager, from, to, bcc }) {
+function buildMessage({ groups, month, manager, from, to, bcc, preview }) {
   const mes = monthLabel(month);
   const textLines = ['Hola Carlos,', '', `${manager}, gerente de cuenta, dio retroalimentación a su equipo del mes de ${mes}.`, ''];
-  let html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;color:#1f2937;line-height:1.5">` +
+  const pending = [].concat(...groups.map(g => g.execs.filter(e => e.notNotified).map(e => e.name)));
+  let banner = '';
+  if (preview) {
+    banner = `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;margin:0 0 14px;font-size:13px">` +
+      `<b>Vista previa / prueba.</b> Así recibiría Carlos este resumen; este no se le envió.` +
+      (pending.length ? ` <br>Aún no avisas por correo a: <b>${escapeHtml(joinNames(pending))}</b>. En el envío real solo van los ejecutivos ya avisados ese mes.` : '') +
+      `</div>`;
+    textLines.unshift('[VISTA PREVIA — no se envió a Carlos]', '');
+  }
+  let html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;color:#1f2937;line-height:1.5">` + banner +
     `<h2 style="margin:0 0 6px;color:#1d4ed8">Resumen de retroalimentación · ${escapeHtml(mes)}</h2>` +
     `<p>Hola Carlos,</p><p><b>${escapeHtml(manager)}</b>, gerente de cuenta, dio retroalimentación a su equipo del mes de <b>${escapeHtml(mes)}</b>.</p>`;
   groups.forEach(g => {
@@ -65,7 +80,7 @@ function buildMessage({ groups, month, manager, from, to, bcc }) {
       const pts = e.scoredWeight ? `${e.earned} pts de ${e.scoredWeight} calificados (${e.totalWeight} posibles)` : 'Sin calificaciones registradas';
       textLines.push(`  ${e.name} — ${e.roleLabel}`, `  ${pts}`);
       html += `<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin:0 0 10px">` +
-        `<div style="font-weight:bold">${escapeHtml(e.name)}</div>` +
+        `<div style="font-weight:bold">${escapeHtml(e.name)}${e.notNotified ? ' <span style="font-weight:normal;font-size:11px;color:#b45309">(aún no avisado)</span>' : ''}</div>` +
         `<div style="font-size:12px;color:#6b7280">${escapeHtml(e.roleLabel)}</div>` +
         `<div style="font-size:13px;margin:4px 0 6px">${escapeHtml(pts)}</div>`;
       if (e.kpis.length) {
@@ -87,12 +102,15 @@ function buildMessage({ groups, month, manager, from, to, bcc }) {
     });
   });
   html += `<p style="font-size:12px;color:#6b7280;margin-top:18px">Resumen automático generado desde el repositorio de KPIs.</p></div>`;
-  return { from, to, bcc, subject: `Resumen de retroalimentación del equipo · ${mes}`, text: textLines.join('\n'), html };
+  return { from, to, bcc, subject: `${preview ? '[PRUEBA] ' : ''}Resumen de retroalimentación del equipo · ${mes}`, text: textLines.join('\n'), html };
 }
 
+// GET  /api/notify-summary?month=YYYY-MM   → HTML preview of the email (nothing sent)
+// POST {month}                              → sends it to Carlos (BCC the manager)
+// POST {month, test:true}                   → sends the preview only to the manager
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    res.setHeader('Allow', 'GET, POST');
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
@@ -100,12 +118,37 @@ module.exports = async (req, res) => {
   if (!session) { res.status(401).json({ error: 'No autenticado' }); return; }
   if (session.role !== 'admin') { res.status(403).json({ error: 'No autorizado' }); return; }
 
-  const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+  const body = req.method === 'GET' ? (req.query || {}) : (typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}));
   const month = typeof body.month === 'string' ? body.month : '';
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) { res.status(400).json({ error: 'bad_request' }); return; }
-  if (!mailConfigured()) { res.status(503).json({ error: 'not_configured' }); return; }
 
   const db = getPool();
+  if (req.method === 'GET' || body.test) {
+    try {
+      const { rows } = await db.query(`select data from kpi_repo_state where id = $1`, ['default']);
+      const groups = buildSummary(rows[0] ? rows[0].data : null, month, true);
+      if (req.method === 'GET') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        if (!groups.length) { res.status(200).send(`<p style="font-family:Arial,sans-serif">Aún no hay calificaciones ni comentarios en ${escapeHtml(monthLabel(month))} para armar el resumen.</p>`); return; }
+        const m = buildMessage({ groups, month, manager: managerName(), from: '', to: '', bcc: '', preview: true });
+        res.status(200).send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(m.subject)}</title></head>` +
+          `<body style="margin:0;padding:24px;background:#f3f4f6"><div style="background:#fff;max-width:720px;margin:0 auto;padding:22px;border-radius:12px">` +
+          `<div style="font-family:Arial,sans-serif;font-size:13px;color:#6b7280;margin-bottom:12px"><b>Asunto:</b> ${escapeHtml(m.subject.replace('[PRUEBA] ', ''))}</div>${m.html}</div></body></html>`);
+        return;
+      }
+      if (!mailConfigured()) { res.status(503).json({ error: 'not_configured' }); return; }
+      if (!groups.length) { res.status(409).json({ error: 'nothing_to_preview' }); return; }
+      await sendMail(buildMessage({ groups, month, manager: managerName(), from: fromAddress(), to: process.env.MAIL_USER, preview: true }));
+      res.status(200).json({ ok: true, test: true, sentAt: Date.now() });
+    } catch (err) {
+      console.error('notify-summary preview failed:', err && err.message);
+      res.status(502).json({ error: 'send_failed' });
+    }
+    return;
+  }
+
+  if (!mailConfigured()) { res.status(503).json({ error: 'not_configured' }); return; }
   try {
     let boss = null;
     try {
