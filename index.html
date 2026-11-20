@@ -563,12 +563,15 @@
                                   <div style="font-size:11px;font-weight:700;color:oklch(0.42 0.15 254);margin-top:2px">{{ file.slotLabel }}</div>
                                 </sc-if>
                                 <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
+                                <sc-if value="{{file.byManager}}" hint-placeholder-val="{{false}}">
+                                  <div style="font-size:10.5px;font-weight:700;color:oklch(0.45 0.12 300);margin-top:2px">Cargado por el gerente</div>
+                                </sc-if>
                                 <sc-if value="{{file.hasTiming}}" hint-placeholder-val="{{false}}">
                                   <div style="font-size:11px;font-weight:700;color:{{file.timingColor}};margin-top:2px">{{ file.timingText }}</div>
                                 </sc-if>
                               </div>
                               <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
-                              <button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
+                              <sc-if value="{{file.canRemove}}" hint-placeholder-val="{{true}}"><button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button></sc-if>
                             </div>
                           </sc-for>
                         </div>
@@ -598,8 +601,11 @@
                                   <div style="flex:1;min-width:0">
                                     <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="display:block;color:{{brand.accent}};font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ file.name }}</a>
                                     <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
+                                    <sc-if value="{{file.byManager}}" hint-placeholder-val="{{false}}">
+                                      <div style="font-size:10.5px;font-weight:700;color:oklch(0.45 0.12 300);margin-top:2px">Cargado por el gerente</div>
+                                    </sc-if>
                                   </div>
-                                  <button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button>
+                                  <sc-if value="{{file.canRemove}}" hint-placeholder-val="{{true}}"><button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button></sc-if>
                                 </div>
                               </sc-for>
                               <sc-if value="{{sl.canUpload}}" hint-placeholder-val="{{true}}">
@@ -660,18 +666,29 @@
                                   <div style="font-size:11px;font-weight:700;color:oklch(0.42 0.15 254);margin-top:2px">{{ file.slotLabel }}</div>
                                 </sc-if>
                                 <div style="font-size:10.5px;color:oklch(0.5 0.02 255);margin-top:2px">🕒 {{ file.uploadedDisplay }}</div>
+                                <sc-if value="{{file.byManager}}" hint-placeholder-val="{{false}}">
+                                  <div style="font-size:10.5px;font-weight:700;color:oklch(0.45 0.12 300);margin-top:2px">Cargado por el gerente</div>
+                                </sc-if>
                                 <sc-if value="{{file.hasTiming}}" hint-placeholder-val="{{false}}">
                                   <div style="font-size:11px;font-weight:700;color:{{file.timingColor}};margin-top:2px">{{ file.timingText }}</div>
                                 </sc-if>
                               </div>
                               <span style="color:oklch(0.6 0.02 255);flex:none">{{ file.sizeDisplay }}</span>
                               <a href="{{file.downloadUrl}}" download="{{file.name}}" target="_blank" rel="noopener" style="flex:none;font-size:11px;font-weight:700;color:white;background:{{brand.accent}};padding:4px 9px;border-radius:7px;text-decoration:none">Descargar</a>
+                              <sc-if value="{{file.canRemove}}" hint-placeholder-val="{{false}}"><button onClick="{{file.onRemove}}" style="border:none;background:none;color:oklch(0.5 0.16 25);font-size:11px;font-weight:700;cursor:pointer;flex:none">Quitar</button></sc-if>
                             </div>
                           </sc-for>
                         </div>
                       </sc-if>
                       <sc-if value="{{kpi.noAttachments}}" hint-placeholder-val="{{true}}">
                         <div style="font-size:12px;color:oklch(0.6 0.02 255)">Sin archivos adjuntos</div>
+                      </sc-if>
+                      <sc-if value="{{kpi.canManagerUpload}}" hint-placeholder-val="{{false}}">
+                        <div style="margin-top:8px">
+                          <div style="font-size:10.5px;font-weight:700;color:oklch(0.45 0.12 300);margin-bottom:4px">Adjuntar archivo como gerente</div>
+                          <input type="file" accept=".xlsx,.xls,.xlsb,.pdf,.ppt,.pptx" onChange="{{kpi.onFileChange}}" style="font-size:12px;width:100%"/>
+                          <div style="font-size:10.5px;color:oklch(0.6 0.02 255);margin-top:4px">Por ejemplo, el resumen que calculas tú. No cuenta como entrega del ejecutivo.</div>
+                        </div>
                       </sc-if>
                       <sc-if value="{{kpi.hasRemovedFiles}}" hint-placeholder-val="{{false}}">
                         <details style="margin-top:8px;font-size:11.5px">
@@ -1469,13 +1486,15 @@ class Component extends DCLogic {
   syncRemote(data, action){
     const isExec = this.state.session && this.state.session.role === 'ejecutivo';
     if (isExec && !action) return Promise.resolve();
+    // Manager file uploads/removals also go as an action: files are not part
+    // of the manager's whole-data save.
     this.setState({ saveStatus: 'saving' });
     this.__saveSeq = (this.__saveSeq || 0) + 1;
     const p = fetch('/api/state', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(isExec ? { action } : { data })
+      body: JSON.stringify(isExec || (action && (action.type === 'uploadFile' || action.type === 'removeFile')) ? { action } : { data })
     }).then(r => {
       if (!r.ok) throw new Error('save failed');
       this.markSaved();
@@ -1819,6 +1838,7 @@ class Component extends DCLogic {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     const rec = (this.state.data.scores[execId][month] || {})[kpiId];
+    const asManager = this.state.role === 'manager';
     const existingCount = rec ? (rec.attachments || (rec.attachment ? [rec.attachment] : [])).length : 0;
     if (existingCount >= 5) {
       alert('Ya subiste el máximo de 5 archivos para este KPI.');
@@ -1827,9 +1847,9 @@ class Component extends DCLogic {
     }
     const kpiDef = this.findKpi(this.state.data, execId, kpiId).kpi;
     const dueRule = deadlineRuleFor(execId, kpiDef, month);
-    if (dueRule) {
+    if (dueRule && !asManager) {
       const atts = rec ? (rec.attachments || (rec.attachment ? [rec.attachment] : [])) : [];
-      const delivery = evaluateKpiDelivery(dueRule, month, atts, Date.now());
+      const delivery = evaluateKpiDelivery(dueRule, month, atts.filter(a => !a.byManager), Date.now());
       const closure = deliveryClosure(execId, kpiDef, delivery, month);
       const slot = slotId && delivery && delivery.slots ? delivery.slots.find(sl => sl.id === slotId) : null;
       if (slot) {
@@ -1876,10 +1896,13 @@ class Component extends DCLogic {
     if (!data.scores[execId][month][kpiId]) data.scores[execId][month][kpiId] = { score:null, comment:'' };
     const rec = data.scores[execId][month][kpiId];
     const attachments = this.attachmentsFor(rec);
-    const full = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ...attachment, uploadedAt: Date.now() };
+    const byManager = this.state.role === 'manager';
+    const full = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ...attachment, uploadedAt: Date.now(), ...(byManager ? { byManager: true } : {}) };
     attachments.push(full);
     const { kpi } = this.findKpi(data, execId, kpiId);
-    this.addLog(data, execId, month, `Adjuntó archivo "${attachment.name}" (${attachments.length}/5) en "${kpi ? kpi.name : kpiId}"`);
+    this.addLog(data, execId, month, byManager
+      ? `El gerente adjuntó "${attachment.name}" en "${kpi ? kpi.name : kpiId}"`
+      : `Adjuntó archivo "${attachment.name}" (${attachments.length}/5) en "${kpi ? kpi.name : kpiId}"`);
     this.saveData(data, { type:'uploadFile', execId, month, kpiId, attachment: full });
   }
 
@@ -2157,7 +2180,9 @@ class Component extends DCLogic {
           const editable = isManagerEditable;
           const rawAttachments = rec.attachments || (rec.attachment ? [rec.attachment] : []);
           const dueRule = deadlineRuleFor(exec.id, k, s.selectedMonth);
-          const delivery = dueRule ? evaluateKpiDelivery(dueRule, s.selectedMonth, rawAttachments, Date.now()) : null;
+          // Files the manager attached never count as the ejecutivo's delivery.
+          const execAttachments = rawAttachments.filter(a => !a.byManager);
+          const delivery = dueRule ? evaluateKpiDelivery(dueRule, s.selectedMonth, execAttachments, Date.now()) : null;
           const TIMING_COLORS = { ontime: 'oklch(0.48 0.14 150)', late: 'oklch(0.55 0.15 60)', missed: 'oklch(0.5 0.17 25)', pending: 'oklch(0.55 0.02 255)', unknown: 'oklch(0.55 0.02 255)' };
           const daysText = n => n === 1 ? '1 día de retraso' : `${n} días de retraso`;
           const pendingText = left => left <= 0 ? '⚠ Pendiente de carga · vence hoy'
@@ -2256,7 +2281,7 @@ class Component extends DCLogic {
             statusText: dlText(d), color: dlColor(d)
           })) : [];
           const attachmentsList = rawAttachments.map((a, idx) => {
-            const t = delivery && delivery.files[idx];
+            const t = delivery && !a.byManager && delivery.files[execAttachments.indexOf(a)];
             const slotDef = dueRule && dueRule.slots && dueRule.slots.find(x => x.id === a.slot);
             return {
             ...a,
@@ -2269,6 +2294,9 @@ class Component extends DCLogic {
             downloadUrl: a.dataUrl || ('/api/file?id=' + encodeURIComponent(a.id || '')),
             sizeDisplay: fmtBytes(a.size),
             uploadedDisplay: fmtUploaded(a.uploadedAt),
+            byManager: !!a.byManager,
+            // Each side removes only its own files.
+            canRemove: s.role === 'manager' ? !!a.byManager : (s.role === 'ejecutivo' && !a.byManager),
             onRemove: () => this.removeKpiFile(exec.id, s.selectedMonth, k.id, a.id)
             };
           });
@@ -2332,6 +2360,7 @@ class Component extends DCLogic {
             hasAttachments: attachmentsList.length > 0,
             removedFiles,
             hasRemovedFiles: removedFiles.length > 0,
+            canManagerUpload: s.role === 'manager' && attachmentsList.length < 5,
             removedCountLabel: removedFiles.length === 1 ? '1 archivo quitado' : `${removedFiles.length} archivos quitados`,
             noAttachments: attachmentsList.length === 0,
             attachmentCountLabel: `${attachmentsList.length}/5 archivos`,

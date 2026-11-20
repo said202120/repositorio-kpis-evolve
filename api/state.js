@@ -90,7 +90,7 @@ function migrateAttachments(rec) {
   return rec.attachments;
 }
 
-async function applyExecAction(db, data, execId, action) {
+async function applyExecAction(db, data, execId, action, role = 'ejecutivo') {
   if (action.type === 'toggleplan') {
     const item = data.plans && data.plans[execId] && data.plans[execId][action.month] &&
       data.plans[execId][action.month].find(i => i.id === action.itemId);
@@ -145,7 +145,8 @@ async function applyExecAction(db, data, execId, action) {
       type: typeof att.type === 'string' ? att.type : 'application/octet-stream',
       size: typeof att.size === 'number' ? att.size : null,
       uploadedAt: Date.now(),
-      ...(slot ? { slot } : {})
+      ...(slot ? { slot } : {}),
+      ...(role === 'manager' ? { byManager: true } : {})
     };
     await ensureFilesTable();
     if (!(await insertFile(db, { ...meta, execId, month: action.month, kpiId: action.kpiId, dataUrl: att.dataUrl }))) {
@@ -153,9 +154,11 @@ async function applyExecAction(db, data, execId, action) {
       await insertFile(db, { ...meta, execId, month: action.month, kpiId: action.kpiId, dataUrl: att.dataUrl });
     }
     attachments.push(meta);
-    // A new file means the manager has something new to review.
-    if (rec.review && rec.review.status) rec.review = { status: 'pendiente', at: Date.now() };
-    pushLog(data, execId, action.month, 'ejecutivo', `Adjuntó archivo "${att.name}" (${attachments.length}/${MAX_ATTACHMENTS_PER_KPI})`);
+    // A new file from the ejecutivo means the manager has something new to review.
+    if (role !== 'manager' && rec.review && rec.review.status) rec.review = { status: 'pendiente', at: Date.now() };
+    pushLog(data, execId, action.month, role, role === 'manager'
+      ? `El gerente adjuntó "${att.name}"`
+      : `Adjuntó archivo "${att.name}" (${attachments.length}/${MAX_ATTACHMENTS_PER_KPI})`);
     return;
   }
 
@@ -163,7 +166,7 @@ async function applyExecAction(db, data, execId, action) {
     const rec = data.scores && data.scores[execId] && data.scores[execId][action.month] && data.scores[execId][action.month][action.kpiId];
     if (rec) {
       const attachments = migrateAttachments(rec);
-      const idx = attachments.findIndex(a => a.id === action.attachmentId);
+      const idx = attachments.findIndex(a => a.id === action.attachmentId && (role === 'manager' ? !!a.byManager : !a.byManager));
       if (idx !== -1) {
         // Never deleted: the file leaves the KPI's active list but stays in
         // kpi_repo_files and in the KPI's history (removedAttachments).
@@ -172,10 +175,10 @@ async function applyExecAction(db, data, execId, action) {
         rec.removedAttachments.push({ ...gone, removedAt: Date.now() });
         await ensureFilesTable();
         await db.query('update kpi_repo_files set removed_at = now(), removed_by = $3 where id = $1 and exec_id = $2',
-          [action.attachmentId, execId, 'ejecutivo']);
+          [action.attachmentId, execId, role]);
       }
     }
-    pushLog(data, execId, action.month, 'ejecutivo', 'Quitó un archivo adjunto (queda en el histórico)');
+    pushLog(data, execId, action.month, role, role === 'manager' ? 'El gerente quitó un archivo que había adjuntado (queda en el histórico)' : 'Quitó un archivo adjunto (queda en el histórico)');
     return;
   }
 
@@ -259,7 +262,13 @@ module.exports = async (req, res) => {
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
-      if (session.role === 'admin') {
+      // The manager can also attach (and take back) his own files on any
+      // ejecutivo's KPI — e.g. the absenteeism summary he works out from the
+      // billing support. Those go through the same locked action path.
+      const adminFileAction = session.role === 'admin' && body && body.action &&
+        ['uploadFile', 'removeFile'].includes(body.action.type) && typeof body.action.execId === 'string';
+
+      if (session.role === 'admin' && !adminFileAction) {
         const data = body && body.data;
         if (!data || typeof data !== 'object') {
           res.status(400).json({ error: 'Missing data' });
@@ -299,12 +308,13 @@ module.exports = async (req, res) => {
       // second request blocks until the first commits, then reads the
       // already-updated row instead of the stale one.
       const action = body && body.action;
-      if (!action || action.execId !== session.execId) {
+      if (!action || (!adminFileAction && action.execId !== session.execId)) {
         res.status(403).json({ error: 'No autorizado' });
         return;
       }
 
-      const execId = session.execId;
+      const execId = adminFileAction ? action.execId : session.execId;
+      const actorRole = adminFileAction ? 'manager' : 'ejecutivo';
       const client = await db.connect();
       try {
         await client.query('BEGIN');
@@ -316,7 +326,10 @@ module.exports = async (req, res) => {
 
         await runVeronicaCleanup(client, data);
         await extractInlineFiles(client, data);
-        await applyExecAction(client, data, execId, action);
+        if (adminFileAction && !(data.executives || []).some(e => e && e.id === execId)) {
+          throw new HttpError(404, 'Ejecutivo no encontrado');
+        }
+        await applyExecAction(client, data, execId, action, actorRole);
 
         await client.query(
           `insert into kpi_repo_state (id, data, updated_at)
