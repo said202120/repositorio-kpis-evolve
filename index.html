@@ -930,6 +930,30 @@ function migrateToSpinMasterData(data){
 // starts with empty collections. Idempotent: once 'daniel' exists, or when
 // there is no active 'edgar' to replace, nothing happens.
 const DANIEL_PHOTO = 'assets/daniel-mena.jpg';
+// Daniel's weekly activation info: Sunday evening (the manager then helps with
+// the weekend demo report) or Monday before 12:00 at the latest; uploads after
+// that do not count (deadline rule in SPIN_DEADLINES.daniel). Only the old
+// default text is replaced, so edits made with "Editar KPIs" are kept.
+const ACTIVACION_OLD_DESC = 'Todos los domingos, al cierre de las activaciones.';
+const ACTIVACION_OLD_CONSIDERATIONS = 'Al haber culminado los días de activación; puede enviarse por WhatsApp.';
+const ACTIVACION_DESC = 'Domingo en la tarde-noche o, a más tardar, el lunes antes de las 12:00 pm.';
+const ACTIVACION_CONSIDERATIONS = 'Si lo envías el domingo en la tarde-noche, te ayudo con el reporte de demostradoras del fin de semana. ' +
+  'Si no, entrégalo el lunes antes del mediodía: después de las 12:00 pm ese reporte no cuenta como válido. ' +
+  'Además de enviarlo (puede ser por WhatsApp), súbelo aquí para que quede registrada la hora de entrega.';
+function migrateActivacionDanielData(data){
+  if (!data || !Array.isArray(data.executives)) return false;
+  let changed = false;
+  data.executives.forEach(e => {
+    if (!e || e.id !== 'daniel') return;
+    (e.categories || []).forEach(c => (c.kpis || []).forEach(k => {
+      if (!k || k.name !== 'Envío de información de activación (domingos)') return;
+      if (k.desc === ACTIVACION_OLD_DESC) { k.desc = ACTIVACION_DESC; changed = true; }
+      if (k.considerations === ACTIVACION_OLD_CONSIDERATIONS) { k.considerations = ACTIVACION_CONSIDERATIONS; changed = true; }
+    }));
+  });
+  return changed;
+}
+
 function migrateDanielReplacesAlanData(data){
   if (!data || !Array.isArray(data.executives)) return false;
   const aIdx = data.executives.findIndex(e => e && e.id === 'edgar' && !e.archived);
@@ -1064,7 +1088,9 @@ const SPIN_DEADLINES = {
   daniel: {
     'Entrega de soportes de nómina y gastos': { type:'monthDay', day:5, monthOffset:1 },
     'Entrega de reportes de iniciativas corporativas': { type:'monthDay', day:10 },
-    'Envío de información de activación (domingos)': { type:'weekly', weekday:0 },
+    // Sunday evening (so the manager can help with the weekend demo report) or,
+    // at the latest, Monday before 12:00 Mexico City time; later doesn't count.
+    'Envío de información de activación (domingos)': { type:'weekly', weekday:1, cutoffHour:12, strict:true },
     'Salida de campo y hallazgos (reporte)': { type:'monthDay', day:5, byMonth: {
       '2026-10': { type:'monthDay', day:31, info:'Salida única este mes: sáb 31 oct · Objetivo: demostradoras K-Pop Demon Hunters · Entregable: reporte de hallazgos.' }
     } }
@@ -1150,10 +1176,21 @@ function deadlineDayNums(due, ym){
 //   everything else window = from the day after the previous deadline (the first
 //                   one from the 1st of the month) onwards
 // The first file inside a window settles it; later ones get no verdict.
+// Hour of the day (0-23) in Mexico City for a timestamp.
+function mxHour(ts){
+  const h = new Intl.DateTimeFormat('en-US', { timeZone: MX_TZ, hour: 'numeric', hourCycle: 'h23' }).format(new Date(ts));
+  return Number(h) % 24;
+}
+// Rules may add `cutoffHour` (deadline is that hour of the due day, Mexico City
+// time, instead of end of day) and `strict` (an upload after the deadline does
+// not count for that week: the file is marked 'invalid' and the deadline stays
+// open / missed, instead of 'late').
 function evaluateDelivery(due, ym, uploadTimestamps, nowTs){
   const nums = deadlineDayNums(due, ym);
   if (!nums.length) return null;
   const today = mxDayNum(nowTs);
+  const cutoff = typeof due.cutoffHour === 'number' ? due.cutoffHour : null;
+  const afterCutoff = (day, ts, dueDay) => day > dueDay || (cutoff !== null && day === dueDay && mxHour(ts) >= cutoff);
   const [y, m] = ym.split('-').map(Number);
   const monthFirst = Math.floor(Date.UTC(y, m - 1, 1) / 86400000);
   const weekly = due.type === 'weekly';
@@ -1173,14 +1210,20 @@ function evaluateDelivery(due, ym, uploadTimestamps, nowTs){
   dated.forEach(f => {
     const d = deadlines.find(x => f.day >= x.start && f.day <= x.end);
     if (!d || d.fileIdx !== null) return;
+    const late = afterCutoff(f.day, f.ts, d.dayNum);
+    if (late && due.strict) {
+      files[f.idx] = { status: 'invalid', daysLate: Math.max(0, f.day - d.dayNum), dayNum: d.dayNum };
+      return;
+    }
     d.fileIdx = f.idx;
     d.daysLate = Math.max(0, f.day - d.dayNum);
-    d.status = d.daysLate > 0 ? 'late' : 'ontime';
+    d.status = late ? 'late' : 'ontime';
     files[f.idx] = { status: d.status, daysLate: d.daysLate, dayNum: d.dayNum };
   });
+  const pastDue = d => today > d.dayNum || (cutoff !== null && today === d.dayNum && mxHour(nowTs) >= cutoff);
   deadlines.forEach(d => {
     if (d.status) return;
-    d.status = undated ? 'unknown' : (today > d.dayNum ? 'missed' : 'pending');
+    d.status = undated ? 'unknown' : (pastDue(d) ? 'missed' : 'pending');
     if (d.status === 'missed') d.daysLate = today - d.dayNum;
   });
   return { deadlines, files, today };
@@ -1292,7 +1335,7 @@ function alanSpinCategories(){
       {id:'g1', name:'Tasa de ausentismo', desc:'Tener por lo menos 85% de días efectivos respecto a la activación.', considerations:'No aplica en incapacidades, días festivos, etc.', weight:5, okr:'Equipo de promotoría'},
       {id:'g2', name:'Entrega de soportes de nómina y gastos', desc:'Entrega los primeros 5 días hábiles.', considerations:'Enviar del 1 al 5 para que el día 5 se revise y homologue.', weight:15, okr:'Administrativo'},
       {id:'g3', name:'Entrega de reportes de iniciativas corporativas', desc:'Entrega los primeros 10 días.', considerations:'Reporte de iniciativas corporativas a total proyectos, del 1 al 5 de cada mes.', weight:10, okr:'Servicio de reporteo al cliente'},
-      {id:'g4', name:'Envío de información de activación (domingos)', desc:'Todos los domingos, al cierre de las activaciones.', considerations:'Al haber culminado los días de activación; puede enviarse por WhatsApp.', weight:10, okr:'Servicio de reporteo al cliente'},
+      {id:'g4', name:'Envío de información de activación (domingos)', desc:ACTIVACION_DESC, considerations:ACTIVACION_CONSIDERATIONS, weight:10, okr:'Servicio de reporteo al cliente'},
       {id:'g5', name:'Salida de campo y hallazgos (reporte)', desc:'Dos salidas mensuales con reporte de valor para el cliente.', considerations:'Enviar los primeros 5 días.', weight:15, okr:'Equipo de promotoría'},
       {id:'g6', name:'Entrega de cierre de proyecto', desc:'Entrega los primeros 3 días hábiles tras terminar el proyecto.', considerations:'Hallazgos, ventas, casos de éxito y mejoras para presentar al cliente.', weight:20, okr:'Servicio de reporteo al cliente'}
     ])},
@@ -1441,7 +1484,7 @@ class Component extends DCLogic {
           // Admin sessions bring the stored data up to date (team change)
           // before it is shown, and persist it only if something changed.
           const migrated = session.role === 'admin'
-            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data), migrateRoleLabelsData(payload.data), migrateIniciativasEvolveData(payload.data), migratePlanTrabajoMariferData(payload.data), migrateReportesMensualesMariferData(payload.data), scoreApprovedWithoutScoreData(payload.data)].some(Boolean)
+            ? [this.migrateToSpinMaster(payload.data), migrateSpinKpisData(payload.data), migrateDanielReplacesAlanData(payload.data), migrateRoleLabelsData(payload.data), migrateIniciativasEvolveData(payload.data), migratePlanTrabajoMariferData(payload.data), migrateReportesMensualesMariferData(payload.data), migrateActivacionDanielData(payload.data), scoreApprovedWithoutScoreData(payload.data)].some(Boolean)
             : false;
           this.setState({ data: payload.data });
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(payload.data))); } catch(e) {}
@@ -2340,7 +2383,10 @@ class Component extends DCLogic {
           // Files the manager attached never count as the ejecutivo's delivery.
           const execAttachments = rawAttachments.filter(a => !a.byManager);
           const delivery = dueRule ? evaluateKpiDelivery(dueRule, s.selectedMonth, execAttachments, Date.now()) : null;
-          const TIMING_COLORS = { ontime: 'oklch(0.48 0.14 150)', late: 'oklch(0.55 0.15 60)', missed: 'oklch(0.5 0.17 25)', pending: 'oklch(0.55 0.02 255)', unknown: 'oklch(0.55 0.02 255)' };
+          const TIMING_COLORS = { ontime: 'oklch(0.48 0.14 150)', late: 'oklch(0.55 0.15 60)', missed: 'oklch(0.5 0.17 25)', invalid: 'oklch(0.5 0.17 25)', pending: 'oklch(0.55 0.02 255)', unknown: 'oklch(0.55 0.02 255)' };
+          // Rules with a cutoff hour (e.g. Monday 12:00) show it next to the date.
+          const cutoffHour = dueRule && typeof dueRule.cutoffHour === 'number' ? dueRule.cutoffHour : null;
+          const atCutoff = n => dayLabel(n) + (cutoffHour !== null ? ` · ${cutoffHour}:00` : '');
           const daysText = n => n === 1 ? '1 día de retraso' : `${n} días de retraso`;
           const pendingText = left => left <= 0 ? '⚠ Pendiente de carga · vence hoy'
             : left === 1 ? '⚠ Pendiente de carga · vence mañana'
@@ -2348,7 +2394,11 @@ class Component extends DCLogic {
             : `✓ A tiempo · faltan ${left} días`;
           const nextPending = delivery ? delivery.deadlines.find(d => d.status === 'pending') : null;
           const anyMissed = delivery ? delivery.deadlines.some(d => d.status === 'missed') : false;
-          const deadlineHint = nextPending
+          const deadlineHint = dueRule && dueRule.strict
+            ? (nextPending
+              ? `Recuerda subirlo a más tardar el ${dayLabel(nextPending.dayNum)}${cutoffHour !== null ? ` antes de las ${cutoffHour}:00` : ''}. Después de esa hora no cuenta como válido.`
+              : (anyMissed ? 'Ya pasó la hora límite de las semanas marcadas: lo que se suba para ellas ya no cuenta como válido.' : ''))
+            : nextPending
             ? `Recuerda subirlo a más tardar el ${dayLabel(nextPending.dayNum)}. Si lo subes después de esa fecha, cuenta como retraso.`
             : (anyMissed ? 'Ya pasó la fecha límite: sube el archivo lo antes posible; cada día adicional cuenta como retraso.' : '');
           const derived = DERIVED_KPIS[String(k.name || '').trim().toLowerCase()];
@@ -2434,7 +2484,7 @@ class Component extends DCLogic {
             return urgent ? TIMING_COLORS.late : (d.status === 'pending' ? TIMING_COLORS.ontime : TIMING_COLORS[d.status]);
           };
           const deadlineRows = delivery ? delivery.deadlines.map(d => ({
-            label: d.slotLabel ? `${d.slotLabel} · ${dayLabel(d.dayNum)}` : dayLabel(d.dayNum),
+            label: d.slotLabel ? `${d.slotLabel} · ${atCutoff(d.dayNum)}` : atCutoff(d.dayNum),
             statusText: dlText(d), color: dlColor(d)
           })) : [];
           const attachmentsList = rawAttachments.map((a, idx) => {
@@ -2444,7 +2494,8 @@ class Component extends DCLogic {
             ...a,
             hasSlot: !!slotDef, slotLabel: slotDef ? slotDef.label : '',
             hasTiming: !!t,
-            timingText: t ? (t.status === 'late' ? `⚠ ${daysText(t.daysLate)} (límite ${dayLabel(t.dayNum)})` : `✓ A tiempo (límite ${dayLabel(t.dayNum)})`) : '',
+            timingText: t ? (t.status === 'invalid' ? `✕ Fuera de horario: no cuenta (límite ${atCutoff(t.dayNum)})`
+              : t.status === 'late' ? `⚠ ${daysText(t.daysLate)} (límite ${atCutoff(t.dayNum)})` : `✓ A tiempo (límite ${atCutoff(t.dayNum)})`) : '',
             timingColor: t ? TIMING_COLORS[t.status] : '',
             // Files live in their own table now; a freshly uploaded one is
             // still in memory as a data URL until the next reload.
