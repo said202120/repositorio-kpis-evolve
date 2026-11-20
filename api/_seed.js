@@ -29,6 +29,16 @@ const SEEDS = [
     comment: 'En octubre una falla del sistema impidió que se guardaran tus cargas del Maestro y Plan de Trabajo de las ' +
       'primeras semanas. No fue tu responsabilidad, así que este KPI no se penaliza y queda al 100% este mes. ' +
       'Gracias por mantener el envío semanal de los lunes.'
+  },
+  {
+    // 2026-11-20: the weekly Emetrix coverage report goes by email from the
+    // coverage artifact, not as an upload; deadline-exempt Oct–Dic (index.html).
+    id: 'seed-emetrix-veronica-2026-10',
+    exec: 'veronica', month: '2026-10', kpi: /semana vencida/i, kpiLabel: 'Reporte a semana vencida (cobertura Emetrix e incidencias)',
+    score: 100,
+    comment: 'El reporte de cobertura Emetrix lo estás enviando cada semana por correo desde el artefacto de cobertura ' +
+      '(quién captura y quién no), por eso no aparece cargado aquí. Como sí se envió, este KPI queda al 100% en octubre ' +
+      'y no se penaliza. Gracias por el seguimiento semanal.'
   }
 ];
 

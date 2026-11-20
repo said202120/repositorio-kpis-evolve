@@ -1206,13 +1206,20 @@ const DEADLINE_EXEMPT = { daniel: ['2026-10'], edgar: ['2026-10'] };
 // deadline and no points are lost; a late upload still shows its delay.
 //   Verónica, Oct 2026, payroll/expense support (g2): she uploaded October's
 //   support to November by mistake (it is due the month after).
+//   Verónica, Oct–Dic 2026, weekly Emetrix coverage report (g5): she sends it
+//   by email from the coverage artifact the manager built, so it never shows
+//   up here as an upload.
+const EMETRIX_BY_EMAIL = 'Sin penalización: el reporte de cobertura Emetrix se envía cada semana por correo desde el artefacto de cobertura, por eso no aparece cargado aquí (autorizado por el gerente).';
 const DEADLINE_EXEMPT_KPI = {
   //   Verónica, Oct 2026, weekly master + work plan (g4): a system failure
   //   (database/hosting) kept her October uploads from being saved.
   veronica: { '2026-10': {
     g2: 'Sin penalización: el soporte de octubre se cargó por error en noviembre (autorizado por el gerente).',
-    g4: 'Sin penalización: en octubre una falla del sistema impidió guardar tus cargas; no fue tu responsabilidad (autorizado por el gerente).'
-  } }
+    g4: 'Sin penalización: en octubre una falla del sistema impidió guardar tus cargas; no fue tu responsabilidad (autorizado por el gerente).',
+    g5: EMETRIX_BY_EMAIL
+  },
+  '2026-11': { g5: EMETRIX_BY_EMAIL },
+  '2026-12': { g5: EMETRIX_BY_EMAIL } }
 };
 
 // Once every deadline of a KPI has passed and at least one was never met, the
