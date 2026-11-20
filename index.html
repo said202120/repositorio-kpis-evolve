@@ -1262,7 +1262,12 @@ function effectiveDay(n){
 
 // Executives who owe nothing for a given month (e.g. Daniel took over the post
 // in October 2026): no points lost and uploads stay open.
-const DEADLINE_EXEMPT = { daniel: ['2026-10'], edgar: ['2026-10'] };
+const DEADLINE_EXEMPT = { daniel: ['2026-10', '2026-11'], edgar: ['2026-10'] };
+// Optional note shown on the KPIs of an exempt month (default: change of ejecutivo).
+//   Daniel, Nov 2026: he had not been shown the repository yet.
+const DEADLINE_EXEMPT_REASON = {
+  daniel: { '2026-11': 'Sin penalización en noviembre: aún no conocías el repositorio; las fechas cuentan a partir de diciembre (autorizado por el gerente).' }
+};
 // Single-KPI exemptions approved by the manager: uploads stay open past the
 // deadline and no points are lost; a late upload still shows its delay.
 //   Verónica, Oct 2026, payroll/expense support (g2): she uploaded October's
@@ -1291,7 +1296,10 @@ function deliveryClosure(execId, kpi, delivery, month){
   if (!delivery || !kpi) return null;
   const ds = delivery.deadlines;
   const missed = ds.filter(d => d.status === 'missed').length;
-  if ((DEADLINE_EXEMPT[execId] || []).includes(month)) return { exempt: true, locked: false, lost: 0, missed, total: ds.length };
+  if ((DEADLINE_EXEMPT[execId] || []).includes(month)) {
+    const reason = (DEADLINE_EXEMPT_REASON[execId] || {})[month];
+    return { exempt: true, ...(reason ? { reason } : {}), locked: false, lost: 0, missed, total: ds.length };
+  }
   const kpiReason = ((DEADLINE_EXEMPT_KPI[execId] || {})[month] || {})[kpi.id];
   if (kpiReason) return { exempt: true, reason: kpiReason, locked: false, lost: 0, missed, total: ds.length };
   const locked = missed > 0 && !ds.some(d => d.status === 'pending');
