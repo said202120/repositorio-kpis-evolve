@@ -2,7 +2,7 @@ const { getPool } = require('./_db');
 const { getSession } = require('./_auth');
 const { ensureFilesTable, newFileId, insertFile, extractInlineFiles } = require('./_files');
 const { hasRun, runVeronicaCleanup, scrubStaleCopy } = require('./_cleanup');
-const { SEED_ID, runSeed, reapplyOnStaleCopy } = require('./_seed');
+const { runSeed, reapplyOnStaleCopy, allDone: seedsDone } = require('./_seed');
 
 const ROW_ID = 'default';
 
@@ -254,8 +254,7 @@ module.exports = async (req, res) => {
         res.status(200).json({ data: null });
         return;
       }
-      const seedDone = Array.isArray(data.migrations) && data.migrations.includes(SEED_ID);
-      if (blobHasInlineFiles(data) || !hasRun(data) || !seedDone) data = await prepareRow(db);
+      if (blobHasInlineFiles(data) || !hasRun(data) || !seedsDone(data)) data = await prepareRow(db);
       res.status(200).json({
         data: session.role === 'admin' ? data : filterForExec(data, session.execId)
       });
