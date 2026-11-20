@@ -2,6 +2,7 @@ const { getPool } = require('./_db');
 const { getSession } = require('./_auth');
 const { ensureFilesTable, newFileId, insertFile, extractInlineFiles } = require('./_files');
 const { hasRun, runVeronicaCleanup, scrubStaleCopy } = require('./_cleanup');
+const { SEED_ID, runSeed, reapplyOnStaleCopy } = require('./_seed');
 
 const ROW_ID = 'default';
 
@@ -39,8 +40,9 @@ async function prepareRow(db) {
     const { rows } = await client.query('select data from kpi_repo_state where id = $1 for update', [ROW_ID]);
     const data = rows[0].data;
     const cleaned = await runVeronicaCleanup(client, data);
+    const seeded = await runSeed(client, data);
     const moved = await extractInlineFiles(client, data);
-    if (cleaned || moved) await saveRow(client, data);
+    if (cleaned || seeded || moved) await saveRow(client, data);
     await client.query('COMMIT');
     return data;
   } catch (err) {
@@ -252,7 +254,8 @@ module.exports = async (req, res) => {
         res.status(200).json({ data: null });
         return;
       }
-      if (blobHasInlineFiles(data) || !hasRun(data)) data = await prepareRow(db);
+      const seedDone = Array.isArray(data.migrations) && data.migrations.includes(SEED_ID);
+      if (blobHasInlineFiles(data) || !hasRun(data) || !seedDone) data = await prepareRow(db);
       res.status(200).json({
         data: session.role === 'admin' ? data : filterForExec(data, session.execId)
       });
@@ -281,8 +284,10 @@ module.exports = async (req, res) => {
           const current = rows[0] ? rows[0].data : null;
           if (current) {
             await runVeronicaCleanup(client, current);
+            await runSeed(client, current);
             await extractInlineFiles(client, current);
             scrubStaleCopy(data, current);
+            reapplyOnStaleCopy(data, current);
           }
           const merged = mergeExecOwned(data, current);
           await extractInlineFiles(client, merged);
@@ -325,6 +330,7 @@ module.exports = async (req, res) => {
         }
 
         await runVeronicaCleanup(client, data);
+        await runSeed(client, data);
         await extractInlineFiles(client, data);
         if (adminFileAction && !(data.executives || []).some(e => e && e.id === execId)) {
           throw new HttpError(404, 'Ejecutivo no encontrado');
