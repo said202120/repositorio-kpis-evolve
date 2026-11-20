@@ -122,7 +122,12 @@ async function applyExecAction(db, data, execId, action, role = 'ejecutivo') {
     if (!att || typeof att.name !== 'string' || typeof att.dataUrl !== 'string') {
       throw new HttpError(400, 'Archivo inválido');
     }
-    if (!ALLOWED_ATTACHMENT_EXT.test(att.name)) {
+    // The signed monthly close sheet (pseudo-KPI "__cierre", manager only)
+    // is usually a scan: PDF or image.
+    if (action.kpiId === SIGNED_SHEET_KPI) {
+      if (role !== 'manager') throw new HttpError(403, 'Solo el gerente puede subir la hoja firmada');
+      if (!SIGNED_SHEET_EXT.test(att.name)) throw new HttpError(400, 'La hoja firmada debe ser PDF o imagen (JPG, PNG)');
+    } else if (!ALLOWED_ATTACHMENT_EXT.test(att.name)) {
       throw new HttpError(400, 'Solo se permiten archivos Excel, PDF o PowerPoint');
     }
     if (att.dataUrl.length > MAX_ATTACHMENT_DATA_URL_LENGTH) {
@@ -237,6 +242,8 @@ function mergeExecOwned(incoming, current) {
 // prefix and JSON wrapper while staying clear of the 4.5MB hard limit.
 const MAX_ATTACHMENT_DATA_URL_LENGTH = 4.2 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_EXT = /\.(xlsx|xls|xlsb|pdf|ppt|pptx)$/i;
+const SIGNED_SHEET_KPI = '__cierre';
+const SIGNED_SHEET_EXT = /\.(pdf|jpe?g|png)$/i;
 const MAX_ATTACHMENTS_PER_KPI = 5;
 
 module.exports = async (req, res) => {

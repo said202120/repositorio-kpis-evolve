@@ -16,7 +16,8 @@
     input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:99px;background:oklch(0.9 0.01 255);outline:none;}
     input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent, oklch(0.55 0.19 254));border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25);cursor:pointer;}
     ::selection{background:oklch(0.85 0.06 254);}
-    @media print{ [data-no-print]{display:none !important;} body{background:white;} }
+    .print-only{display:none}
+    @media print{ [data-no-print]{display:none !important;} .print-only{display:block !important;} body{background:white;} }
 
     @keyframes loginDrift{ 0%,100%{ transform:translate(0,0) } 50%{ transform:translate(-18px,14px) } }
     @keyframes loginDrift2{ 0%,100%{ transform:translate(0,0) } 50%{ transform:translate(16px,-12px) } }
@@ -220,7 +221,7 @@
               <!-- Month-by-month results, oldest first: graded months as coloured tiles with the score, pending ones grey. -->
               <div style="display:flex;flex-direction:column;gap:8px">
                 <sc-for list="{{card.history}}" as="h" hint-placeholder-count="2">
-                  <div style="border-radius:13px;padding:11px 14px;background:{{h.bg}};border:2px solid {{h.ring}};display:flex;align-items:center;gap:12px">
+                  <div style="border-radius:13px;padding:11px 14px;background:{{h.bg}};border:2px solid {{h.ring}};display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px">
                     <div style="flex:none;width:62px">
                       <div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:{{h.fg}}">{{ h.month }}</div>
                       <div style="font-size:10.5px;font-weight:600;color:{{h.fg}};opacity:.8">{{ h.year }}</div>
@@ -231,6 +232,15 @@
                     <div style="flex:1;min-width:0">
                       <div style="font-size:12.5px;font-weight:800;color:{{h.fg}}">{{ h.title }}</div>
                       <div style="font-size:11px;color:{{h.fg}};opacity:.85;line-height:1.35;margin-top:2px">{{ h.note }}</div>
+                    </div>
+                    <!-- Signed monthly close sheet: download it, or (manager) upload the scan. Clicks here do not open the detail. -->
+                    <div onClick="{{h.onStop}}" style="flex-basis:100%;display:flex;justify-content:flex-end;align-items:center;gap:6px">
+                      <sc-for list="{{h.signed}}" as="f" hint-placeholder-count="1">
+                        <a href="{{f.url}}" download="{{f.name}}" target="_blank" rel="noopener" title="{{f.title}}" style="font-size:11px;font-weight:800;color:white;background:oklch(0.45 0.13 150);padding:4px 9px;border-radius:99px;text-decoration:none;white-space:nowrap">📎 {{ f.label }}</a>
+                      </sc-for>
+                      <sc-if value="{{h.canUpload}}" hint-placeholder-val="{{false}}">
+                        <label title="Subir la hoja de cierre firmada (PDF o imagen)" style="font-size:11px;font-weight:700;color:{{h.fg}};border:1.5px dashed {{h.fg}};padding:3px 9px;border-radius:99px;cursor:pointer;white-space:nowrap;opacity:.9">📎 {{ h.uploadLabel }}<input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange="{{h.onSigned}}" style="display:none"/></label>
+                      </sc-if>
                     </div>
                   </div>
                 </sc-for>
@@ -501,7 +511,8 @@
                         <input type="range" min="0" max="100" value="{{kpi.sliderVal}}" onChange="{{kpi.onScoreChange}}" style="flex:1;--accent:{{brand.accent}}"/>
                         <div style="width:38px;text-align:right;font-weight:800;font-size:15px;font-family:Sora,sans-serif;color:{{kpi.scoreColor}}">{{ kpi.scoreDisplay }}</div>
                       </div>
-                      <textarea placeholder="Comentario de retroalimentación…" value="{{kpi.comment}}" onChange="{{kpi.onCommentChange}}" style="width:100%;margin-top:10px;border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-family:Inter,sans-serif;font-size:12.5px;resize:vertical;min-height:44px"></textarea>
+                      <div class="print-only" style="margin-top:8px;font-size:11.5px;line-height:1.45;white-space:pre-wrap">{{ kpi.comment }}</div>
+                      <textarea data-no-print placeholder="Comentario de retroalimentación…" value="{{kpi.comment}}" onChange="{{kpi.onCommentChange}}" style="width:100%;margin-top:10px;border:1px solid oklch(0.88 0.01 255);border-radius:9px;padding:8px 10px;font-family:Inter,sans-serif;font-size:12.5px;resize:vertical;min-height:44px"></textarea>
                       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
                         <sc-for list="{{kpi.reviewOptions}}" as="opt" hint-placeholder-count="2">
                           <button onClick="{{opt.onClick}}" style="flex:1;border:1.5px solid {{opt.color}};background:{{opt.bg}};color:{{opt.fg}};font-size:11.5px;font-weight:700;padding:6px 8px;border-radius:8px;cursor:pointer;font-family:Inter,sans-serif">{{ opt.label }}</button>
@@ -1299,6 +1310,9 @@ function alanSpinCategories(){
 // an existing score is kept. KPIs approved before this rule existed, still
 // without a score, get the same on the next manager load.
 const APPROVED_DEFAULT_SCORE = 100;
+// The signed monthly close sheet is stored as the attachments of a pseudo-KPI
+// that no category lists, so it never counts in totals or deadlines.
+const SIGNED_SHEET_KPI = '__cierre';
 function scoreApprovedWithoutScoreData(data){
   let changed = false;
   Object.entries((data && data.scores) || {}).forEach(([execId, months]) => {
@@ -1877,6 +1891,19 @@ class Component extends DCLogic {
   }
 
   // slotId: set when the KPI has one upload per report (see `slots` in the deadline rules).
+  onSignedSheetChange(execId, month, e){
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/\.(pdf|jpe?g|png)$/i.test(file.name)) { alert('La hoja firmada debe ser PDF o imagen (JPG, PNG).'); return; }
+    if (file.size > 3 * 1024 * 1024) { alert('El archivo no debe superar 3 MB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => this.saveKpiFile(execId, month, SIGNED_SHEET_KPI, {
+      name: file.name, type: file.type || 'application/octet-stream', size: file.size, dataUrl: reader.result
+    });
+    reader.readAsDataURL(file);
+  }
+
   onKpiFileChange(execId, month, kpiId, e, slotId){
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -1943,7 +1970,9 @@ class Component extends DCLogic {
     const full = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ...attachment, uploadedAt: Date.now(), ...(byManager ? { byManager: true } : {}) };
     attachments.push(full);
     const { kpi } = this.findKpi(data, execId, kpiId);
-    this.addLog(data, execId, month, byManager
+    this.addLog(data, execId, month, kpiId === SIGNED_SHEET_KPI
+      ? `El gerente subió la hoja de cierre firmada "${attachment.name}"`
+      : byManager
       ? `El gerente adjuntó "${attachment.name}" en "${kpi ? kpi.name : kpiId}"`
       : `Adjuntó archivo "${attachment.name}" (${attachments.length}/5) en "${kpi ? kpi.name : kpiId}"`);
     this.saveData(data, { type:'uploadFile', execId, month, kpiId, attachment: full });
@@ -2196,14 +2225,27 @@ class Component extends DCLogic {
         const t = this.computeTotal(exec, m.value);
         const [mon, yr] = m.label.split(' ');
         const ring = m.value === s.selectedMonth ? 'oklch(0.55 0.15 254 / 0.55)' : 'transparent';
+        const sheetRec = ((((data.scores || {})[exec.id] || {})[m.value]) || {})[SIGNED_SHEET_KPI];
+        const sheets = (sheetRec && sheetRec.attachments) || [];
+        const signed = sheets.map((a, i) => ({
+          name: a.name, title: `${a.name} · ${fmtUploaded(a.uploadedAt)}`,
+          label: sheets.length > 1 ? `Hoja firmada ${i + 1}` : 'Hoja firmada',
+          url: a.dataUrl || ('/api/file?id=' + encodeURIComponent(a.id || ''))
+        }));
+        const clip = {
+          signed, onStop: e => e.stopPropagation(),
+          canUpload: s.role === 'manager' && signed.length < 5,
+          uploadLabel: signed.length ? '+' : 'Subir firma',
+          onSigned: e => { e.stopPropagation(); this.onSignedSheetChange(exec.id, m.value, e); }
+        };
         if (t.isEmpty) {
-          return { month: mon, year: yr, graded: false, score: '', ring,
+          return { ...clip, month: mon, year: yr, graded: false, score: '', ring,
             bg: 'oklch(0.965 0.004 255)', fg: 'oklch(0.48 0.02 255)', title: 'Pendiente',
             note: m.value >= CURRENT_MONTH ? 'El mes aún no cierra' : 'Sin calificar todavía' };
         }
         const st = this.statusFor(t.earned);
         const sf = shortfallsOf(exec, m.value);
-        return { month: mon, year: yr, graded: true, score: String(t.earned), ring,
+        return { ...clip, month: mon, year: yr, graded: true, score: String(t.earned), ring,
           bg: st.bg, fg: st.color, title: `${st.label} · ${t.earned} de 100 pts`,
           note: sf.length ? 'Faltó: ' + shortfallSummary(sf, 2, false) : '✓ Todos los KPIs completos' };
       });
